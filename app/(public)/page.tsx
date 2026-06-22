@@ -45,7 +45,7 @@ export default function LandingPage() {
         </h1>
 
         <p className="text-lg text-tactical-500 max-w-2xl mb-10 leading-relaxed">
-          A premium tactical operations platform for managing alliances, tracking
+          A tactical operations platform for managing alliances, tracking
           duel performance, coordinating DSB and Canyon Storm battles, and
           maintaining full commander accountability.
         </p>
