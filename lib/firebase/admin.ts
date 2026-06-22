@@ -20,7 +20,7 @@ function initAdmin() {
 const adminApp  = initAdmin()
 const adminAuth = getAuth(adminApp)
 
-export { adminAuth }
+export { adminApp, adminAuth }
 
 // ── CONSTANTS ────────────────────────────────
 export const SESSION_COOKIE_NAME    = '__acc_session'

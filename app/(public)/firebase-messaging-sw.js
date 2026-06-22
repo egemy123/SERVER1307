@@ -10,13 +10,14 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-com
 // Replace these with your actual values; they are NOT secret (public config)
 // ---------------------------------------------------------------------------
 firebase.initializeApp({
-  apiKey:            self.__ACC_FIREBASE_API_KEY            || 'REPLACE_ME',
-  authDomain:        self.__ACC_FIREBASE_AUTH_DOMAIN        || 'REPLACE_ME',
-  projectId:         self.__ACC_FIREBASE_PROJECT_ID         || 'REPLACE_ME',
-  storageBucket:     self.__ACC_FIREBASE_STORAGE_BUCKET     || 'REPLACE_ME',
-  messagingSenderId: self.__ACC_FIREBASE_MESSAGING_SENDER_ID || 'REPLACE_ME',
-  appId:             self.__ACC_FIREBASE_APP_ID             || 'REPLACE_ME',
-});
+  apiKey: "AIzaSyDEYihGnPnK9x4YL54sIWehY-Qu97-A_U8",
+  authDomain: "acc-platform-65402.firebaseapp.com",
+  projectId: "acc-platform-65402",
+  storageBucket: "acc-platform-65402.firebasestorage.app",
+  messagingSenderId: "780477334406",
+  appId: "1:780477334406:web:46301241acfe0119192207",
+  measurementId: "G-CHTY9VW6TV"
+};
 
 const messaging = firebase.messaging();
 
