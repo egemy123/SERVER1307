@@ -87,6 +87,7 @@ export default async function DashboardPage() {
   const activeCount = (members ?? []).length
   const inactiveCount = (inactiveMembers ?? []).length
   const isR4Plus = ['r4', 'r5', 'supreme'].includes(role)
+  const canEditAlliance = role === 'r4' || role === 'r5' || role === 'supreme'
 
   const ACTION_LABELS: Record<string, string> = {
     commander_created: 'Commander added',
@@ -233,7 +234,17 @@ export default async function DashboardPage() {
                 <p className="text-xs text-tactical-500">Alliance Overview</p>
                 <p className="font-semibold text-tactical-900">Command Center</p>
               </div>
-              <span className="text-3xl">🏰</span>
+              <div className="flex items-center gap-2">
+                {canEditAlliance && (
+                  <a
+                    href="/alliance/settings"
+                    className="text-xs px-2.5 py-1 rounded-lg border border-tactical-200 text-tactical-500 hover:border-accent hover:text-accent transition-colors"
+                  >
+                    ✏ Edit
+                  </a>
+                )}
+                <span className="text-3xl">🏰</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -270,7 +281,17 @@ export default async function DashboardPage() {
                 <p className="text-xs text-tactical-500">Weekly Objectives</p>
                 <p className="font-semibold text-tactical-900">Alliance Targets</p>
               </div>
-              <span className="text-3xl">🎯</span>
+              <div className="flex items-center gap-2">
+                {canEditAlliance && (
+                  <a
+                    href="/alliance/settings"
+                    className="text-xs px-2.5 py-1 rounded-lg border border-tactical-200 text-tactical-500 hover:border-accent hover:text-accent transition-colors"
+                  >
+                    ✏ Edit
+                  </a>
+                )}
+                <span className="text-3xl">🎯</span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-3">
