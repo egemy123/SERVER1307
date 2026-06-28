@@ -17,7 +17,6 @@ export default async function DashboardPage() {
   const supabase  = createAdminClient()
   const weekKey   = getWeekKey()
 
-  // Fetch all dashboard data in parallel
   const [
     { data: commander },
     { data: members },
@@ -54,19 +53,19 @@ export default async function DashboardPage() {
   const isR4Plus      = ['r4','r5','supreme'].includes(role)
 
   const STATE_COLORS: Record<string, string> = {
-    pending:               'badge-inactive',
-    registration_open:     'badge-active',
-    registration_closed:   'badge-warning',
-    battle:                'badge-warning',
-    complete:              'badge-active',
+    pending:             'badge-inactive',
+    registration_open:   'badge-active',
+    registration_closed: 'badge-warning',
+    battle:              'badge-warning',
+    complete:            'badge-active',
   }
 
   const STATE_LABELS: Record<string, string> = {
-    pending:               'Pending',
-    registration_open:     'Open',
-    registration_closed:   'Closed',
-    battle:                'Battle',
-    complete:              'Complete',
+    pending:             'Pending',
+    registration_open:   'Open',
+    registration_closed: 'Closed',
+    battle:              'Battle',
+    complete:            'Complete',
   }
 
   const ACTION_LABELS: Record<string, string> = {
@@ -85,6 +84,7 @@ export default async function DashboardPage() {
     dsb_attendance_recorded:    'DSB attendance recorded',
     canyon_attendance_recorded: 'Canyon attendance recorded',
     inactive_flagged:           'Inactive flag set',
+    alliance_created:           'Alliance created',
   }
 
   return (
@@ -105,7 +105,6 @@ export default async function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-
         <div className="stat-card">
           <div className="flex items-center justify-between">
             <span className="text-xs text-tactical-500 font-medium">Active Members</span>
@@ -221,6 +220,63 @@ export default async function DashboardPage() {
               View Canyon →
             </a>
           </div>
+
+          {/* Alliance Overview */}
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-tactical-500">Alliance Overview</p>
+                <p className="font-semibold text-tactical-900">Command Center</p>
+              </div>
+              <span className="text-3xl">🏰</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-surface-overlay p-3 text-center">
+                <p className="text-xs text-tactical-500">Members</p>
+                <p className="text-xl font-semibold text-tactical-900">{activeCount}/100</p>
+              </div>
+              <div className="rounded-xl bg-surface-overlay p-3 text-center">
+                <p className="text-xs text-tactical-500">Gift Level</p>
+                <p className="text-xl font-semibold text-tactical-900">20</p>
+              </div>
+              <div className="rounded-xl bg-surface-overlay p-3 text-center">
+                <p className="text-xs text-tactical-500">Alliance Rank</p>
+                <p className="text-xl font-semibold text-green-700">#1</p>
+              </div>
+              <div className="rounded-xl bg-surface-overlay p-3 text-center">
+                <p className="text-xs text-tactical-500">Status</p>
+                <p className="text-xl font-semibold text-green-700">Active</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Weekly Objectives */}
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-tactical-500">Weekly Objectives</p>
+                <p className="font-semibold text-tactical-900">Alliance Targets</p>
+              </div>
+              <span className="text-3xl">🎯</span>
+            </div>
+            <div className="flex flex-col gap-3">
+              {[
+                { done: true,  text: 'Maintain 95+ active members' },
+                { done: true,  text: 'Secure weekly Duel victory' },
+                { done: false, text: 'Prepare event rosters' },
+                { done: false, text: 'Improve member participation' },
+                { done: false, text: 'Complete weekly objectives' },
+              ].map((obj, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className={obj.done ? 'text-green-500' : 'text-amber-500'}>
+                    {obj.done ? '✓' : '○'}
+                  </span>
+                  <span className="text-sm text-tactical-800">{obj.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -253,6 +309,7 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
     </div>
   )
 }
