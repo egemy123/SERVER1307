@@ -18,14 +18,27 @@ export default function BottomNav({ role, allianceId }: Props) {
 
   const allianceBase = allianceId ? `/alliance/${allianceId}` : '#'
 
-  const menuItems = [
+  const menuItems: { label: string; href: string; icon: string }[] = [
     { label: 'Alliance', href: allianceBase, icon: '🏰' },
     { label: 'Dual', href: `${allianceBase}/duel`, icon: '⚔️' },
-    { label: 'DSB', href: `${allianceBase}/dsb`, icon: '🏜️' },
-    { label: 'Canyon', href: `${allianceBase}/canyon`, icon: '🌀' },
     { label: 'Members', href: `${allianceBase}/members`, icon: '👥' },
     { label: 'Transfers', href: '/transfers', icon: '🔄' },
   ]
+
+  if (['r4', 'r5', 'supreme'].includes(role)) {
+    menuItems.push(
+      {
+        label: 'Verification',
+        href: `${allianceBase}/verification`,
+        icon: '✅',
+      },
+      {
+        label: 'Alliance Settings',
+        href: `${allianceBase}/settings`,
+        icon: '⚙️',
+      }
+    )
+  }
 
   if (role === 'supreme') {
     menuItems.push({
