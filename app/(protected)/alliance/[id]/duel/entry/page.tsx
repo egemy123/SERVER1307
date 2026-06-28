@@ -1,42 +1,52 @@
-// app/(protected)/alliance/[id]/duel/entry/page.tsx
 'use client'
-import { useState, useEffect, useMemo } from 'react'
-import { useParams, useRouter }         from 'next/navigation'
-import { DUEL_DAY_NAMES, DUEL_POINT_VALUES } from '@/lib/types'
-import type { DuelDay }                 from '@/lib/types'
+// app/(protected)/alliance/[id]/duel/entry/page.tsx
+// Duel entry page — uses DualCascadeSelection for quick mode day entry.
+// Full mode entry is a future update.
+
+import { useState, useEffect }               from 'react'
+import { useParams, useRouter }               from 'next/navigation'
+import { DUEL_DAY_NAMES, DUEL_POINT_VALUES }  from '@/lib/types'
+import type { DuelDay }                       from '@/lib/types'
+import DualCascadeSelection                   from '@/components/duel/DualCascadeSelection'
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 const DAYS: DuelDay[] = ['monday','tuesday','wednesday','thursday','friday','saturday']
 
-interface Commander { uid: string; name: string }
+interface Commander { uid: string; name: string; role: 'r1'|'r2'|'r3'|'r4'|'r5' }
 interface DuelWeek  { id: string; mode: string; minimum_score: number | null; week_key: string }
 interface DuelEntry {
-  commander_uid: string; day: DuelDay
-  status: string; day_locked: boolean
+  commander_uid: string
+  day: DuelDay
+  status: 'passed' | 'below_minimum' | 'absent'
+  day_locked: boolean
 }
+
+interface CascadeResult {
+  minimumPlayers:    string[]
+  nonMinimumPlayers: string[]
+  absentPlayers:     string[]
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function DuelEntryPage() {
   const params     = useParams()
   const router     = useRouter()
   const allianceId = params.id as string
 
-  const [members,    setMembers]    = useState<Commander[]>([])
-  const [duelWeek,   setDuelWeek]   = useState<DuelWeek | null>(null)
-  const [entries,    setEntries]    = useState<DuelEntry[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [msg,        setMsg]        = useState('')
-  const [activeDay,  setActiveDay]  = useState<DuelDay>('monday')
-
-  // Quick entry state
-  const [minScore,      setMinScore]      = useState('')
-  const [participated,  setParticipated]  = useState<Set<string>>(new Set())
-  const [belowMinimum,  setBelowMinimum]  = useState<Set<string>>(new Set())
-  const [search1,       setSearch1]       = useState('')
-  const [search2,       setSearch2]       = useState('')
-
-  // Mode selection for new week
+  const [members,        setMembers]        = useState<Commander[]>([])
+  const [duelWeek,       setDuelWeek]       = useState<DuelWeek | null>(null)
+  const [entries,        setEntries]        = useState<DuelEntry[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [saving,         setSaving]         = useState(false)
+  const [msg,            setMsg]            = useState('')
+  const [activeDay,      setActiveDay]      = useState<DuelDay>('monday')
   const [showModeSelect, setShowModeSelect] = useState(false)
   const [selectedMode,   setSelectedMode]   = useState<'quick'|'full'>('quick')
+  const [minScore,       setMinScore]       = useState('')
+
+  // ── Data loading ───────────────────────────────────────────────────────────
 
   useEffect(() => { fetchData() }, [allianceId])
 
@@ -49,39 +59,37 @@ export default function DuelEntryPage() {
       setDuelWeek(data.week ?? null)
       setEntries(data.entries ?? [])
       if (!data.week) setShowModeSelect(true)
-    } catch { setMsg('Failed to load data') }
-    finally   { setLoading(false) }
+    } catch {
+      setMsg('Failed to load data')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const currentDayEntries  = entries.filter(e => e.day === activeDay)
-  const isDayLocked        = currentDayEntries.some(e => e.day_locked)
+  // ── Derived state ──────────────────────────────────────────────────────────
 
-  // Pre-populate chips if day already has entries
-  useEffect(() => {
-    if (!isDayLocked) {
-      setParticipated(new Set())
-      setBelowMinimum(new Set())
-      return
+  const currentDayEntries = entries.filter(e => e.day === activeDay)
+  const isDayLocked       = currentDayEntries.some(e => e.day_locked)
+
+  const getDayStats = (day: DuelDay) => {
+    const dayEntries = entries.filter(e => e.day === day)
+    return {
+      locked: dayEntries.some(e => e.day_locked),
+      passed: dayEntries.filter(e => e.status === 'passed').length,
+      below:  dayEntries.filter(e => e.status === 'below_minimum').length,
+      absent: dayEntries.filter(e => e.status === 'absent').length,
     }
-    const p = new Set(currentDayEntries.filter(e => e.status !== 'absent').map(e => e.commander_uid))
-    const b = new Set(currentDayEntries.filter(e => e.status === 'below_minimum').map(e => e.commander_uid))
-    setParticipated(p)
-    setBelowMinimum(b)
-  }, [activeDay, entries])
+  }
 
-  // Auto-calculated results
-  const passed  = useMemo(() => [...participated].filter(uid => !belowMinimum.has(uid)), [participated, belowMinimum])
-  const absent  = useMemo(() => members.filter(m => !participated.has(m.uid)).map(m => m.uid), [members, participated])
+  // Map local Commander shape → DualCascadeSelection's expected shape
+  const cascadeMembers = members.map(m => ({
+    id:          m.uid,
+    uid:         m.uid,
+    displayName: m.name,
+    role:        m.role,
+  }))
 
-  // Filtered lists for search
-  const slot1List = useMemo(() =>
-    members.filter(m => m.name.toLowerCase().includes(search1.toLowerCase())),
-    [members, search1]
-  )
-  const slot2List = useMemo(() =>
-    members.filter(m => participated.has(m.uid) && m.name.toLowerCase().includes(search2.toLowerCase())),
-    [members, participated, search2]
-  )
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleStartWeek = async () => {
     setSaving(true); setMsg('')
@@ -95,15 +103,17 @@ export default function DuelEntryPage() {
       if (!res.ok) { setMsg(data.error); return }
       setShowModeSelect(false)
       fetchData()
-    } catch { setMsg('Failed to start week') }
-    finally   { setSaving(false) }
+    } catch {
+      setMsg('Failed to start week')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleLockDay = async () => {
+  const handleCascadeComplete = async (result: CascadeResult) => {
     if (!duelWeek) return
-    if (!minScore && duelWeek.mode === 'quick') {
-      setMsg('Set minimum score first'); return
-    }
+    if (!minScore) { setMsg('Set the minimum score before locking the day'); return }
+
     setSaving(true); setMsg('')
     try {
       const res = await fetch('/api/duel/lock-day', {
@@ -112,42 +122,25 @@ export default function DuelEntryPage() {
         body:    JSON.stringify({
           duel_week_id:  duelWeek.id,
           day:           activeDay,
-          minimum_score: minScore ? parseInt(minScore) : null,
-          participated:  [...participated],
-          below_minimum: [...belowMinimum],
-          absent,
+          minimum_score: parseInt(minScore),
+          participated:  [...result.minimumPlayers, ...result.nonMinimumPlayers],
+          below_minimum: result.nonMinimumPlayers,
+          absent:        result.absentPlayers,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setMsg(data.error); return }
-      setMsg(`${activeDay} locked successfully`)
+      setMsg(`${activeDay} locked ✓`)
+      setMinScore('')
       fetchData()
-    } catch { setMsg('Failed to lock day') }
-    finally   { setSaving(false) }
+    } catch {
+      setMsg('Failed to lock day')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const toggleParticipated = (uid: string) => {
-    if (isDayLocked) return
-    setParticipated(prev => {
-      const next = new Set(prev)
-      if (next.has(uid)) {
-        next.delete(uid)
-        setBelowMinimum(bm => { const b = new Set(bm); b.delete(uid); return b })
-      } else {
-        next.add(uid)
-      }
-      return next
-    })
-  }
-
-  const toggleBelow = (uid: string) => {
-    if (isDayLocked) return
-    setBelowMinimum(prev => {
-      const next = new Set(prev)
-      next.has(uid) ? next.delete(uid) : next.add(uid)
-      return next
-    })
-  }
+  // ── Loading ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -160,7 +153,8 @@ export default function DuelEntryPage() {
     )
   }
 
-  // Mode selection screen
+  // ── Mode selection ─────────────────────────────────────────────────────────
+
   if (showModeSelect) {
     return (
       <div className="flex flex-col gap-5 animate-fade-in max-w-lg">
@@ -168,44 +162,63 @@ export default function DuelEntryPage() {
           <h1 className="page-title">Start Duel Week</h1>
           <p className="page-subtitle">Choose entry mode for this week</p>
         </div>
+
         {msg && (
           <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{msg}</div>
         )}
+
         <div className="grid grid-cols-1 gap-3">
           {([
-            { mode: 'quick', title: 'Quick Entry', desc: 'Select who participated and who scored below minimum. Absences are auto-calculated. No exact scores stored.' },
-            { mode: 'full',  title: 'Full Manual Entry', desc: 'Enter exact scores for every member every day. Generates leaderboards, rankings, and MVP calculations.' },
+            {
+              mode:  'quick',
+              title: 'Quick Entry',
+              desc:  'Select who participated and who scored below minimum. Absences are auto-calculated.',
+              icon:  '⚡',
+            },
+            {
+              mode:  'full',
+              title: 'Full Manual Entry',
+              desc:  'Enter exact scores for every member. Generates leaderboards and MVP calculations.',
+              icon:  '📊',
+            },
           ] as const).map(opt => (
             <button
               key={opt.mode}
               onClick={() => setSelectedMode(opt.mode)}
               className="glass-card p-5 text-left transition-all duration-150"
               style={selectedMode === opt.mode ? {
-                border: '2px solid #22C55E',
+                border:     '2px solid #22C55E',
                 background: 'rgba(220,252,231,0.5)',
-                boxShadow: '0 0 0 4px rgba(34,197,94,0.15)',
+                boxShadow:  '0 0 0 4px rgba(34,197,94,0.15)',
               } : {
                 border: '2px solid transparent',
-              }}  
+              }}
             >
               <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">{opt.icon}</span>
                 <p className="font-semibold text-tactical-900">{opt.title}</p>
-                {selectedMode === opt.mode && <span className="badge badge-active text-xs">Selected</span>}
+                {selectedMode === opt.mode && (
+                  <span className="badge badge-active text-xs ml-auto">Selected</span>
+                )}
               </div>
               <p className="text-sm text-tactical-500">{opt.desc}</p>
             </button>
           ))}
         </div>
+
         <button onClick={handleStartWeek} disabled={saving} className="btn-primary w-full">
-          {saving ? 'Starting...' : 'Start This Week →'}
+          {saving ? 'Starting…' : 'Start This Week →'}
         </button>
       </div>
     )
   }
 
+  // ── Main entry page ────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
 
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="page-header mb-0">
           <h1 className="page-title">Duel Entry</h1>
@@ -216,9 +229,10 @@ export default function DuelEntryPage() {
         <button onClick={() => router.back()} className="btn-ghost text-sm">← Back</button>
       </div>
 
+      {/* Status message */}
       {msg && (
         <div className={`p-3 rounded-xl text-sm border animate-fade-in ${
-          msg.includes('success') || msg.includes('locked')
+          msg.includes('✓') || msg.includes('locked')
             ? 'bg-accent-light border-accent/30 text-accent-deep'
             : 'bg-red-50 border-red-200 text-red-700'
         }`}>
@@ -229,12 +243,11 @@ export default function DuelEntryPage() {
       {/* Day selector tabs */}
       <div className="flex gap-1 overflow-x-auto pb-1">
         {DAYS.map(day => {
-          const dayEntries = entries.filter(e => e.day === day)
-          const locked     = dayEntries.some(e => e.day_locked)
+          const { locked, passed, absent } = getDayStats(day)
           return (
             <button
               key={day}
-              onClick={() => { setActiveDay(day); setSearch1(''); setSearch2('') }}
+              onClick={() => { setActiveDay(day); setMsg('') }}
               className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-medium
                          whitespace-nowrap transition-all shrink-0 border
                          ${activeDay === day
@@ -244,34 +257,72 @@ export default function DuelEntryPage() {
                            : 'bg-white/70 text-tactical-500 border-tactical-200 hover:border-tactical-300'
                          }`}
             >
-              <span className="capitalize">{day.slice(0,3)}</span>
+              <span className="capitalize">{day.slice(0, 3)}</span>
               <span className="font-mono mt-0.5">+{DUEL_POINT_VALUES[day]}pt</span>
-              {locked && <span className="text-[9px] mt-0.5">✓ locked</span>}
+              {locked
+                ? <span className="text-[9px] mt-0.5">✓ {passed}p/{absent}a</span>
+                : <span className="text-[9px] mt-0.5 opacity-0">·</span>
+              }
             </button>
           )
         })}
       </div>
 
-      {/* Day entry panel */}
+      {/* Day content panel */}
       <div className="glass-card p-5">
+
+        {/* Day header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="font-semibold text-tactical-900 capitalize">{DUEL_DAY_NAMES[activeDay]}</p>
+            <p className="font-semibold text-tactical-900 capitalize">
+              {DUEL_DAY_NAMES[activeDay]}
+            </p>
             <p className="text-xs text-tactical-500 mt-0.5">
-              {isDayLocked ? '✓ Day locked' : `${members.length} members`}
+              {isDayLocked
+                ? '✓ Day locked — results recorded'
+                : `${members.length} active members`
+              }
             </p>
           </div>
-          {isDayLocked && (
-            <span className="badge badge-active">Locked</span>
-          )}
+          {isDayLocked && <span className="badge badge-active">Locked</span>}
         </div>
 
-        {duelWeek?.mode === 'quick' && !isDayLocked && (
-          <>
+        {/* ── LOCKED DAY VIEW ── */}
+        {isDayLocked && (() => {
+          const { passed, below, absent } = getDayStats(activeDay)
+          return (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-xl bg-accent-light">
+                  <p className="text-2xl font-bold text-accent-deep">{passed}</p>
+                  <p className="text-xs text-accent-mid mt-0.5">Passed</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-amber-50">
+                  <p className="text-2xl font-bold text-amber-700">{below}</p>
+                  <p className="text-xs text-amber-600 mt-0.5">Below Min</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-red-50">
+                  <p className="text-2xl font-bold text-red-600">{absent}</p>
+                  <p className="text-xs text-red-500 mt-0.5">Absent</p>
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-accent-light border border-accent/20 text-center">
+                <p className="text-xs text-accent-deep">
+                  Day locked — no further edits permitted
+                </p>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── QUICK MODE: cascade entry ── */}
+        {!isDayLocked && duelWeek?.mode === 'quick' && (
+          <div className="flex flex-col gap-5">
+
             {/* Minimum score input */}
-            <div className="mb-4">
+            <div>
               <label className="text-xs font-medium text-tactical-600 block mb-1.5">
-                Minimum required score
+                Minimum required score for {DUEL_DAY_NAMES[activeDay]}
               </label>
               <div className="flex gap-2 items-center">
                 <input
@@ -287,139 +338,38 @@ export default function DuelEntryPage() {
                   </span>
                 )}
               </div>
+              {!minScore && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠ Set minimum score before locking the day
+                </p>
+              )}
             </div>
 
-            {/* SLOT 1 — Participated */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-tactical-900">
-                  Slot 1 — Participated
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="badge badge-active">{participated.size}/{members.length}</span>
-                  <button onClick={() => setParticipated(new Set(members.map(m => m.uid)))}
-                          className="btn-ghost text-xs py-1 px-2">All</button>
-                  <button onClick={() => { setParticipated(new Set()); setBelowMinimum(new Set()) }}
-                          className="btn-ghost text-xs py-1 px-2">Clear</button>
-                </div>
-              </div>
-              <input
-                type="text"
-                placeholder="Search commander..."
-                value={search1}
-                onChange={e => setSearch1(e.target.value)}
-                className="input-base mb-2 text-xs"
-              />
-              <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                {slot1List.map(m => (
-                  <button
-                    key={m.uid}
-                    onClick={() => toggleParticipated(m.uid)}
-                    className={participated.has(m.uid) ? 'chip-participated' : 'chip-unselected'}
-                  >
-                    {participated.has(m.uid) && <span>✓</span>}
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Cascade selection — members mapped to DualCascadeSelection's shape */}
+            <DualCascadeSelection
+              members={cascadeMembers}
+              minimumScore={minScore ? parseInt(minScore) : (duelWeek?.minimum_score ?? 0)}
+              onComplete={handleCascadeComplete}
+            />
 
-            {/* SLOT 2 — Below Minimum (only from Slot 1) */}
-            {participated.size > 0 && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-tactical-900">
-                    Slot 2 — Below Minimum
-                  </p>
-                  <span className="badge badge-warning">{belowMinimum.size} selected</span>
-                </div>
-                <p className="text-xs text-tactical-500 mb-2">
-                  Select who scored below minimum from the {participated.size} who participated
-                </p>
-                <input
-                  type="text"
-                  placeholder="Search participated..."
-                  value={search2}
-                  onChange={e => setSearch2(e.target.value)}
-                  className="input-base mb-2 text-xs"
-                />
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                  {slot2List.map(m => (
-                    <button
-                      key={m.uid}
-                      onClick={() => toggleBelow(m.uid)}
-                      className={belowMinimum.has(m.uid) ? 'chip-below' : 'chip-unselected'}
-                    >
-                      {belowMinimum.has(m.uid) && <span>⚠</span>}
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
+            {/* Saving overlay */}
+            {saving && (
+              <div className="p-3 rounded-xl bg-accent-light border border-accent/30 text-sm text-accent-deep text-center animate-pulse">
+                Locking day…
               </div>
             )}
-
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="text-center p-3 rounded-xl bg-accent-light">
-                <p className="text-2xl font-bold text-accent-deep">{passed.length}</p>
-                <p className="text-xs text-accent-mid mt-0.5">Passed</p>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-amber-50">
-                <p className="text-2xl font-bold text-amber-700">{belowMinimum.size}</p>
-                <p className="text-xs text-amber-600 mt-0.5">Below Min</p>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-red-50">
-                <p className="text-2xl font-bold text-red-600">{absent.length}</p>
-                <p className="text-xs text-red-500 mt-0.5">Absent</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleLockDay}
-              disabled={saving || !minScore}
-              className="btn-primary w-full"
-            >
-              {saving ? 'Locking...' : 'Submit & Lock Day ✓'}
-            </button>
-          </>
-        )}
-
-        {/* Locked day view */}
-        {isDayLocked && (
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 rounded-xl bg-accent-light">
-                <p className="text-2xl font-bold text-accent-deep">
-                  {currentDayEntries.filter(e => e.status === 'passed').length}
-                </p>
-                <p className="text-xs text-accent-mid mt-0.5">Passed</p>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-amber-50">
-                <p className="text-2xl font-bold text-amber-700">
-                  {currentDayEntries.filter(e => e.status === 'below_minimum').length}
-                </p>
-                <p className="text-xs text-amber-600 mt-0.5">Below Min</p>
-              </div>
-              <div className="text-center p-3 rounded-xl bg-red-50">
-                <p className="text-2xl font-bold text-red-600">
-                  {currentDayEntries.filter(e => e.status === 'absent').length}
-                </p>
-                <p className="text-xs text-red-500 mt-0.5">Absent</p>
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-accent-light border border-accent/20 text-center">
-              <p className="text-xs text-accent-deep">
-                Day locked — no further edits permitted
-              </p>
-            </div>
           </div>
         )}
 
-        {duelWeek?.mode === 'full' && !isDayLocked && (
-          <div className="text-center py-6">
-            <p className="text-sm text-tactical-500">Full manual entry coming in next update.</p>
+        {/* ── FULL MODE placeholder ── */}
+        {!isDayLocked && duelWeek?.mode === 'full' && (
+          <div className="text-center py-8">
+            <p className="text-2xl mb-2">📊</p>
+            <p className="text-sm font-medium text-tactical-700">Full manual entry</p>
+            <p className="text-sm text-tactical-500 mt-1">Coming in next update.</p>
           </div>
         )}
+
       </div>
     </div>
   )
