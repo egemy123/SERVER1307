@@ -17,16 +17,18 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard',               icon: '⬡', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Alliance',  href: '/alliance/[id]',           icon: '◈', roles: ['r1','r2','r3','r4','r5','supreme'], divider: true },
-  { label: 'Members',   href: '/alliance/[id]/members',   icon: '◉', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Duel',      href: '/alliance/[id]/duel',      icon: '◎', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'DSB',       href: '/alliance/[id]/dsb',       icon: '◆', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Canyon',    href: '/alliance/[id]/canyon',    icon: '◇', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Analytics', href: '/alliance/[id]/analytics', icon: '📊', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Transfers', href: '/transfers',               icon: '⇄', roles: ['r1','r2','r3','r4','r5','supreme'], divider: true },
-  { label: 'Audit Log', href: '/audit',                   icon: '≡', roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Admin',     href: '/admin',                   icon: '⬟', roles: ['supreme'], divider: true },
+  { label: 'Dashboard',        href: '/dashboard',                      icon: '⬡', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Alliance',         href: '/alliance/[id]',                  icon: '◈', roles: ['r1','r2','r3','r4','r5','supreme'], divider: true },
+  { label: 'Members',          href: '/alliance/[id]/members',          icon: '◉', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Duel',             href: '/alliance/[id]/duel',             icon: '◎', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'DSB',              href: '/alliance/[id]/dsb',              icon: '◆', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Canyon',           href: '/alliance/[id]/canyon',           icon: '◇', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Analytics',        href: '/alliance/[id]/analytics',        icon: '📊', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Transfers',        href: '/transfers',                      icon: '⇄', roles: ['r1','r2','r3','r4','r5','supreme'], divider: true },
+  { label: 'Audit Log',        href: '/audit',                          icon: '≡', roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Verification',     href: '/alliance/[id]/verification',     icon: '✅', roles: ['r4','r5','supreme'], divider: true },
+  { label: 'Alliance Settings',href: '/alliance/[id]/settings',         icon: '⚙', roles: ['r4','r5','supreme'] },
+  { label: 'Admin',            href: '/admin',                          icon: '⬟', roles: ['supreme'], divider: true },
 ]
 
 interface Props {
