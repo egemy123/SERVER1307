@@ -40,14 +40,6 @@ export default function BottomNav({ role, allianceId }: Props) {
     )
   }
 
-  if (role === 'supreme') {
-    menuItems.push({
-      label: 'Admin',
-      href: '/admin',
-      icon: '👑',
-    })
-  }
-
   return (
     <>
       {/* Background Blur */}
@@ -87,7 +79,6 @@ export default function BottomNav({ role, allianceId }: Props) {
                   <span className="text-xl">{item.icon}</span>
                   <span className="font-medium">{item.label}</span>
                 </div>
-
                 <span className="text-gray-400">›</span>
               </Link>
             ))}
@@ -140,42 +131,52 @@ export default function BottomNav({ role, allianceId }: Props) {
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/30 bg-white/90 backdrop-blur-xl shadow-lg">
         <div className="flex items-center justify-around py-3">
+          {/* Home */}
           <Link
             href="/dashboard"
             className={`flex flex-col items-center gap-1 transition ${
-              pathname === '/dashboard'
-                ? 'text-green-700'
-                : 'text-gray-500'
+              pathname === '/dashboard' ? 'text-green-700' : 'text-gray-500'
             }`}
           >
             <span className="text-2xl">🏠</span>
             <span className="text-xs font-medium">Home</span>
           </Link>
 
+          {/* Menu */}
           <button
             onClick={() => {
               setProfileOpen(false)
               setMenuOpen(!menuOpen)
             }}
             className={`flex flex-col items-center gap-1 transition ${
-              menuOpen
-                ? 'text-green-700'
-                : 'text-gray-500'
+              menuOpen ? 'text-green-700' : 'text-gray-500'
             }`}
           >
             <span className="text-2xl">☰</span>
             <span className="text-xs font-medium">Menu</span>
           </button>
 
+          {/* Admin — Supreme only */}
+          {role === 'supreme' && (
+            <Link
+              href="/admin"
+              className={`flex flex-col items-center gap-1 transition ${
+                pathname.startsWith('/admin') ? 'text-green-700' : 'text-gray-500'
+              }`}
+            >
+              <span className="text-2xl">👑</span>
+              <span className="text-xs font-medium">Admin</span>
+            </Link>
+          )}
+
+          {/* Profile */}
           <button
             onClick={() => {
               setMenuOpen(false)
               setProfileOpen(!profileOpen)
             }}
             className={`flex flex-col items-center gap-1 transition ${
-              profileOpen
-                ? 'text-green-700'
-                : 'text-gray-500'
+              profileOpen ? 'text-green-700' : 'text-gray-500'
             }`}
           >
             <span className="text-2xl">👤</span>

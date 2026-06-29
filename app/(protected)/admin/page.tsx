@@ -1,7 +1,6 @@
-// app/admin/page.tsx
-import { headers }        from 'next/headers'
+// app/(protected)/admin/page.tsx
 import { createAdminClient } from '@/lib/supabase/admin'
-import Link               from 'next/link'
+import Link from 'next/link'
 
 export default async function AdminPage() {
   const supabase = createAdminClient()
@@ -27,18 +26,43 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <div className="stat-card">
-          <span className="text-xs text-tactical-500 font-medium">Total Commanders</span>
-          <p className="text-3xl font-semibold text-tactical-900 mt-1">{commanderCount ?? 0}</p>
+          <span className="text-xs text-tactical-500">Commanders</span>
+          <p className="text-2xl font-semibold text-tactical-900 mt-1">
+            {commanderCount ?? 0}
+          </p>
+          <p className="text-xs text-tactical-500 mt-1">registered</p>
         </div>
+
         <div className="stat-card">
-          <span className="text-xs text-tactical-500 font-medium">Active Alliances</span>
-          <p className="text-3xl font-semibold text-tactical-900 mt-1">{allianceCount ?? 0}</p>
+          <span className="text-xs text-tactical-500">Active Alliances</span>
+          <p className="text-2xl font-semibold text-tactical-900 mt-1">
+            {allianceCount ?? 0}
+          </p>
+          <p className="text-xs text-tactical-500 mt-1">on platform</p>
         </div>
+
+        <div className={`stat-card ${
+          (pendingTransfers ?? 0) > 0
+            ? 'border border-amber-300 bg-amber-50/40'
+            : ''
+        }`}>
+          <span className="text-xs text-tactical-500">Pending Transfers</span>
+          <p className={`text-2xl font-semibold mt-1 ${
+            (pendingTransfers ?? 0) > 0 ? 'text-amber-700' : 'text-tactical-900'
+          }`}>
+            {pendingTransfers ?? 0}
+          </p>
+          <p className="text-xs text-tactical-500 mt-1">awaiting approval</p>
+        </div>
+
         <div className="stat-card">
-          <span className="text-xs text-tactical-500 font-medium">Pending Transfers</span>
-          <p className="text-3xl font-semibold text-tactical-900 mt-1">{pendingTransfers ?? 0}</p>
+          <span className="text-xs text-tactical-500">Recent Activity</span>
+          <p className="text-2xl font-semibold text-tactical-900 mt-1">
+            {(recentLogs ?? []).length}
+          </p>
+          <p className="text-xs text-tactical-500 mt-1">last actions</p>
         </div>
       </div>
 
@@ -119,6 +143,7 @@ export default async function AdminPage() {
           </div>
         )}
       </div>
+
     </div>
   )
 }
