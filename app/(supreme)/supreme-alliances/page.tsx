@@ -1,5 +1,7 @@
 'use client'
+// app/(supreme)/supreme-alliances/page.tsx
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 interface Alliance {
   id:               string
@@ -20,6 +22,7 @@ export default function SupremeAlliancesPage() {
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
 
+  // Form state
   const [tag,    setTag]    = useState('')
   const [name,   setName]   = useState('')
   const [status, setStatus] = useState('active')
@@ -73,16 +76,24 @@ export default function SupremeAlliancesPage() {
   return (
     <div className="flex flex-col gap-4 animate-fade-in min-w-0">
 
+      {/* Header */}
       <div className="glass-card p-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-tactical-900">Alliances</h1>
-          <p className="text-[11px] text-tactical-500 mt-0.5">{alliances.length} total</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-[11px] text-tactical-500">{alliances.length} total</p>
+            <span className="text-tactical-300">·</span>
+            <Link href="/supreme-commanders" className="text-[11px] text-accent-deep font-medium">
+              Manage Commanders →
+            </Link>
+          </div>
         </div>
         <button onClick={openCreate} className="btn-primary text-xs sm:text-sm shrink-0 px-3 py-2">
           + New
         </button>
       </div>
 
+      {/* List */}
       {loading ? (
         <div className="glass-card p-8 text-center">
           <p className="text-sm text-tactical-400">Loading…</p>
@@ -121,6 +132,7 @@ export default function SupremeAlliancesPage() {
         </div>
       )}
 
+      {/* Modal — mobile-safe: bottom sheet on small screens, centered on desktop */}
       {modalMode && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"

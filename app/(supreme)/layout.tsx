@@ -1,5 +1,6 @@
-import Link               from 'next/link'
-import SupremeBottomNav   from '@/components/layout/SupremeBottomNav'
+// app/(supreme)/layout.tsx
+import Link             from 'next/link'
+import SupremeBottomNav from '@/components/layout/SupremeBottomNav'
 
 export default function SupremeLayout({
   children,
@@ -13,12 +14,8 @@ export default function SupremeLayout({
       <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col gap-2">
 
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-900">
-            1307 COMMAND CENTER
-          </h1>
-          <p className="text-sm text-slate-500">
-            Supreme Console
-          </p>
+          <h1 className="text-xl font-bold text-slate-900">1307 COMMAND CENTER</h1>
+          <p className="text-sm text-slate-500">Supreme Console</p>
         </div>
 
         <Link href="/supreme-dashboard" className="p-3 rounded-lg hover:bg-slate-100">
@@ -27,10 +24,6 @@ export default function SupremeLayout({
 
         <Link href="/supreme-alliances" className="p-3 rounded-lg hover:bg-slate-100">
           ◈ Alliances
-        </Link>
-
-        <Link href="/supreme-commanders" className="p-3 rounded-lg hover:bg-slate-100">
-          ◉ Commanders
         </Link>
 
         <Link href="/supreme-audit" className="p-3 rounded-lg hover:bg-slate-100">

@@ -1,4 +1,5 @@
 'use client'
+// app/(supreme)/supreme-commanders/page.tsx
 import { useEffect, useState } from 'react'
 
 interface Commander {
@@ -28,6 +29,7 @@ export default function SupremeCommandersPage() {
   const [removing,   setRemoving]   = useState<string | null>(null)
   const [confirmUid, setConfirmUid] = useState<string | null>(null)
 
+  // Add Commander form state
   const [showAdd,    setShowAdd]    = useState(false)
   const [newUid,     setNewUid]     = useState('')
   const [newName,    setNewName]    = useState('')
@@ -127,6 +129,7 @@ export default function SupremeCommandersPage() {
   return (
     <div className="flex flex-col gap-4 animate-fade-in min-w-0">
 
+      {/* Header */}
       <div className="glass-card p-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-tactical-900">Commanders</h1>
@@ -139,6 +142,7 @@ export default function SupremeCommandersPage() {
         </button>
       </div>
 
+      {/* Search */}
       <div className="glass-card p-3">
         <input
           value={search}
@@ -149,6 +153,7 @@ export default function SupremeCommandersPage() {
         />
       </div>
 
+      {/* List */}
       {loading ? (
         <div className="glass-card p-8 text-center">
           <p className="text-sm text-tactical-400">Loading…</p>
@@ -162,6 +167,7 @@ export default function SupremeCommandersPage() {
           {filtered.map(c => (
             <div key={c.uid} className="glass-card p-3">
               <div className="flex items-center justify-between gap-3">
+                {/* Avatar + info */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-full bg-accent-light flex items-center
                                   justify-center shrink-0">
@@ -175,6 +181,7 @@ export default function SupremeCommandersPage() {
                   </div>
                 </div>
 
+                {/* Remove button */}
                 {confirmUid === c.uid ? (
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-red-600 font-medium">Remove?</span>
@@ -205,6 +212,7 @@ export default function SupremeCommandersPage() {
                 )}
               </div>
 
+              {/* Badges row */}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className={`badge ${ROLE_COLOR[c.role] ?? 'badge-inactive'}`}>
                   {c.role}
@@ -226,6 +234,7 @@ export default function SupremeCommandersPage() {
         </div>
       )}
 
+      {/* Add Commander modal */}
       {showAdd && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
