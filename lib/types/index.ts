@@ -195,6 +195,8 @@ export type AuditAction =
   | 'commander_updated'
   | 'commander_disabled'
   | 'commander_enabled'
+  | 'verification_rejected'
+  | 'verification_approved'
   | 'google_account_reset'
   | 'role_changed'
   | 'alliance_created'
