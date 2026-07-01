@@ -1,25 +1,10 @@
-// components/layout/BottomNav.tsx
 'use client'
-import Link            from 'next/link'
+// components/layout/BottomNav.tsx
+
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { Role }   from '@/lib/types'
-
-interface NavItem {
-  label: string
-  href:  string
-  icon:  string
-  roles: Role[]
-}
-
-const NAV: NavItem[] = [
-  { label: 'Home',         href: '/dashboard',                  icon: '⬡',  roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Alliance',     href: '/alliance/[id]',              icon: '◈',  roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Duel',         href: '/alliance/[id]/duel',         icon: '◎',  roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'DSB',          href: '/alliance/[id]/dsb',          icon: '◆',  roles: ['r1','r2','r3','r4','r5','supreme'] },
-  { label: 'Verify',       href: '/alliance/[id]/verification', icon: '✅', roles: ['r4','r5','supreme'] },
-  { label: 'Audit',        href: '/audit',                      icon: '≡',  roles: ['supreme'] },
-  { label: 'Admin',        href: '/admin',                      icon: '⬟',  roles: ['supreme'] },
-]
+import { useState } from 'react'
+import type { Role } from '@/lib/types'
 
 interface Props {
   role:       Role
@@ -28,44 +13,165 @@ interface Props {
 
 export default function BottomNav({ role, allianceId }: Props) {
   const pathname = usePathname()
+  const [menuOpen,    setMenuOpen]    = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
-  const resolve = (href: string) =>
-    allianceId ? href.replace('[id]', allianceId) : href
+  const allianceBase = allianceId ? `/alliance/${allianceId}` : '#'
 
-  const isActive = (href: string) => {
-    const resolved = resolve(href)
-    if (resolved === '/dashboard') return pathname === '/dashboard'
-    return pathname === resolved || pathname.startsWith(resolved + '/')
+  // ── Popup menu items (role-gated) ─────────────────────────────────────────
+  const menuItems: { label: string; href: string; icon: string }[] = [
+    { label: 'Alliance',  href: allianceBase,              icon: '🏰' },
+    { label: 'Members',   href: `${allianceBase}/members`, icon: '👥' },
+    { label: 'Duel',      href: `${allianceBase}/duel`,    icon: '⚔️' },
+    { label: 'DSB',       href: `${allianceBase}/dsb`,     icon: '◆'  },
+    { label: 'Canyon',    href: `${allianceBase}/canyon`,  icon: '◇'  },
+    { label: 'Transfers', href: '/transfers',              icon: '🔄' },
+  ]
+
+  if (['r4', 'r5', 'supreme'].includes(role)) {
+    menuItems.push(
+      { label: 'Verification',      href: `${allianceBase}/verification`, icon: '✅' },
+      { label: 'Alliance Settings', href: `${allianceBase}/settings`,     icon: '⚙️' },
+    )
   }
 
-  // Only show items the role can access — cap at 4 visible
-  const visible = NAV.filter(n => n.roles.includes(role)).slice(0, 4)
+  if (role === 'supreme') {
+    menuItems.push(
+      { label: 'Audit Log', href: '/audit', icon: '≡'  },
+    )
+  }
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 lg:hidden
-                    bg-white/95 backdrop-blur-md border-t border-tactical-100
-                    px-1 py-1 flex items-center justify-around safe-area-bottom">
-      {visible.map(item => {
-        const href   = resolve(item.href)
-        const active = isActive(item.href)
-        return (
+    <>
+      {/* Backdrop */}
+      {(menuOpen || profileOpen) && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm transition-all duration-300"
+          onClick={() => { setMenuOpen(false); setProfileOpen(false) }}
+        />
+      )}
+
+      {/* Alliance/Menu popup */}
+      {menuOpen && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50
+                        w-[88%] max-w-sm rounded-3xl border border-white/50
+                        bg-white/95 backdrop-blur-xl shadow-2xl p-5
+                        animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-center mb-4">
+            <div className="text-3xl mb-2">☰</div>
+            <h3 className="text-lg font-semibold text-gray-800">Menu</h3>
+          </div>
+          <div className="space-y-1">
+            {menuItems.map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center justify-between rounded-2xl px-4 py-3
+                            transition-all duration-200
+                            ${pathname === item.href || pathname.startsWith(item.href + '/')
+                              ? 'bg-green-100 text-green-700'
+                              : 'hover:bg-gray-100 text-gray-700'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </div>
+                <span className="text-gray-400">›</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Profile popup */}
+      {profileOpen && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50
+                        w-[88%] max-w-sm rounded-3xl border border-white/50
+                        bg-white/95 backdrop-blur-xl shadow-2xl p-5
+                        animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-center mb-4">
+            <div className="text-3xl mb-2">👤</div>
+            <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
+          </div>
+          <div className="space-y-1">
+            <Link
+              href="/profile"
+              onClick={() => setProfileOpen(false)}
+              className="flex items-center gap-3 rounded-2xl px-4 py-3 hover:bg-gray-100 transition text-gray-700"
+            >
+              <span className="text-xl">👤</span>
+              <span>Profile</span>
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setProfileOpen(false)}
+              className="flex items-center gap-3 rounded-2xl px-4 py-3 hover:bg-gray-100 transition text-gray-700"
+            >
+              <span className="text-xl">⚙️</span>
+              <span>Settings</span>
+            </Link>
+            <button
+              onClick={() => { window.location.href = '/logout' }}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3
+                         text-red-600 hover:bg-red-50 transition"
+            >
+              <span className="text-xl">🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bottom bar ──────────────────────────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden
+                      border-t border-white/30 bg-white/90 backdrop-blur-xl shadow-lg">
+        <div className="flex items-center justify-around py-2">
+
+          {/* Home */}
           <Link
-            key={item.href}
-            href={href}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl
-                        transition-colors duration-150 min-w-[56px]
-                        ${active ? 'text-accent-deep' : 'text-tactical-400 hover:text-tactical-600'}`}
+            href="/dashboard"
+            className={`flex flex-col items-center gap-1 px-3 py-1 transition
+                        ${pathname === '/dashboard' ? 'text-green-700' : 'text-gray-500'}`}
           >
-            <span className={`text-lg leading-none ${active ? 'scale-110' : ''} transition-transform`}>
-              {item.icon}
-            </span>
-            <span className={`text-[10px] font-medium leading-tight
-                              ${active ? 'text-accent-deep' : 'text-tactical-400'}`}>
-              {item.label}
-            </span>
+            <span className="text-2xl">🏠</span>
+            <span className="text-xs font-medium">Home</span>
           </Link>
-        )
-      })}
-    </nav>
+
+          {/* Menu (hamburger) */}
+          <button
+            onClick={() => { setProfileOpen(false); setMenuOpen(!menuOpen) }}
+            className={`flex flex-col items-center gap-1 px-3 py-1 transition
+                        ${menuOpen ? 'text-green-700' : 'text-gray-500'}`}
+          >
+            <span className="text-2xl">☰</span>
+            <span className="text-xs font-medium">Menu</span>
+          </button>
+
+          {/* Admin — Supreme only, always visible in bottom bar */}
+          {role === 'supreme' && (
+            <Link
+              href="/admin"
+              className={`flex flex-col items-center gap-1 px-3 py-1 transition
+                          ${pathname.startsWith('/admin') ? 'text-green-700' : 'text-gray-500'}`}
+            >
+              <span className="text-2xl">👑</span>
+              <span className="text-xs font-medium">Admin</span>
+            </Link>
+          )}
+
+          {/* Profile */}
+          <button
+            onClick={() => { setMenuOpen(false); setProfileOpen(!profileOpen) }}
+            className={`flex flex-col items-center gap-1 px-3 py-1 transition
+                        ${profileOpen ? 'text-green-700' : 'text-gray-500'}`}
+          >
+            <span className="text-2xl">👤</span>
+            <span className="text-xs font-medium">Profile</span>
+          </button>
+
+        </div>
+      </nav>
+    </>
   )
 }
