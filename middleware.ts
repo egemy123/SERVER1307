@@ -1,4 +1,4 @@
-// middleware.ts (root level)
+// middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtDecode } from 'jwt-decode'
@@ -7,8 +7,12 @@ const SESSION_COOKIE = '__acc_session'
 
 const PUBLIC_ROUTES   = ['/', '/login', '/register']
 const PUBLIC_PREFIXES = ['/verify', '/api/auth', '/_next', '/favicon', '/api/verify']
-const SUPREME_ONLY    = ['/admin', '/supreme-dashboard']
-const R4_PATHS        = ['/register', '/attendance', '/transfers']
+
+// Routes only supreme can access
+const SUPREME_ONLY = ['/admin', '/audit']
+
+// Routes only r4+ can access (within an alliance)
+const R4_PLUS_PATHS = ['/verification', '/settings', '/attendance', '/transfers']
 
 interface DecodedClaims {
   uid:            string
@@ -16,6 +20,7 @@ interface DecodedClaims {
   commander_uid?: string
   alliance_id?:   string
   alliance_tag?:  string
+  commander_name?: string
   exp:            number
 }
 
@@ -37,6 +42,7 @@ function decodeSession(cookie: string): DecodedClaims | null {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Skip static files and public routes
   if (pathname.includes('.') || isPublic(pathname)) {
     return NextResponse.next()
   }
@@ -59,8 +65,9 @@ export async function middleware(request: NextRequest) {
     return res
   }
 
-  const { role, commander_uid, alliance_id } = claims
+  const { role, commander_uid, alliance_id, alliance_tag, commander_name } = claims
 
+  // No role/uid = not yet verified — send to register
   if (!role || !commander_uid) {
     if (!pathname.startsWith('/verify') && pathname !== '/register') {
       return NextResponse.redirect(new URL('/register', request.url))
@@ -68,33 +75,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // ── Supreme split: send supreme straight to its own dashboard ──
-  // Anyone with role === 'supreme' landing on /dashboard (the R1–R5
-  // route) gets redirected to /supreme-dashboard instead.
-  if (role === 'supreme' && pathname === '/dashboard') {
-    return NextResponse.redirect(new URL('/supreme-dashboard', request.url))
-  }
-
-  // Non-supreme users can never enter supreme-only routes (also includes
-  // /admin, already covered below, plus /supreme-dashboard explicitly).
-  if (role !== 'supreme' && pathname.startsWith('/supreme-dashboard')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
-  // Supreme-only routes (unchanged from before, now also covers
-  // /supreme-dashboard via the SUPREME_ONLY array update above)
+  // ── Supreme-only routes ───────────────────────────────────────────────────
+  // /admin and /audit are accessible ONLY by supreme
   if (SUPREME_ONLY.some(p => pathname.startsWith(p)) && role !== 'supreme') {
     return NextResponse.redirect(new URL('/dashboard?error=access_denied', request.url))
   }
 
-  // R4+ routes
-  const isR4Route = R4_PATHS.some(p => pathname.includes(p))
-  if (isR4Route && !['r4', 'r5', 'supreme'].includes(role)) {
+  // ── R4+ routes ────────────────────────────────────────────────────────────
+  // /verification and /settings inside an alliance require r4, r5, or supreme
+  const isR4PlusPath = R4_PLUS_PATHS.some(p => pathname.includes(p))
+  if (isR4PlusPath && !['r4', 'r5', 'supreme'].includes(role)) {
     const base = alliance_id ? `/alliance/${alliance_id}` : '/dashboard'
     return NextResponse.redirect(new URL(base, request.url))
   }
 
-  // Alliance scope
+  // ── Alliance scope ────────────────────────────────────────────────────────
+  // Prevent commanders from accessing another alliance's pages
   const allianceMatch = pathname.match(/^\/alliance\/([^/]+)/)
   if (allianceMatch && role !== 'supreme') {
     if (allianceMatch[1] !== alliance_id) {
@@ -102,16 +98,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── CRITICAL FIX: pass headers to server components ──
+  // ── Pass session data to server components via headers ───────────────────
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-commander-uid',  commander_uid)
   requestHeaders.set('x-commander-role', role)
-  requestHeaders.set('x-alliance-id',    alliance_id ?? '')
+  requestHeaders.set('x-alliance-id',    alliance_id     ?? '')
+  requestHeaders.set('x-alliance-tag',   alliance_tag    ?? '')
+  requestHeaders.set('x-commander-name', commander_name  ?? '')
 
   return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
+    request: { headers: requestHeaders },
   })
 }
 
