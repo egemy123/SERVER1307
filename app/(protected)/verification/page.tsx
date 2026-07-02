@@ -89,6 +89,40 @@ const STATUS_LABELS: Record<string, string> = {
   unverified: 'Unverified',
 }
 
+// Derives the code state for a commander row, plus a sort priority so the
+// people ACTIVELY waiting on an officer right now (valid, unexpired code)
+// float to the top — ahead of expired codes, and well ahead of commanders
+// who haven't even started the flow yet.
+//   0 = active code, waiting on officer   (most urgent)
+//   1 = code expired, needs re-request
+//   2 = no code requested yet
+//   3 = rejected                          (least urgent)
+function getCodeState(commander: {
+  verification_status: string
+  verification_codes: any
+}) {
+  const codeRecord = Array.isArray(commander.verification_codes)
+    ? commander.verification_codes[0]
+    : commander.verification_codes
+
+  const hasActiveCode =
+    !!codeRecord &&
+    !codeRecord.used &&
+    new Date(codeRecord.expires_at) > new Date()
+
+  const isExpired =
+    !!codeRecord &&
+    !codeRecord.used &&
+    new Date(codeRecord.expires_at) <= new Date()
+
+  let priority = 2
+  if (commander.verification_status === 'rejected') priority = 3
+  else if (hasActiveCode) priority = 0
+  else if (isExpired) priority = 1
+
+  return { codeRecord, hasActiveCode, isExpired, priority }
+}
+
 export default async function VerificationPage({
   searchParams,
 }: {
@@ -160,7 +194,13 @@ export default async function VerificationPage({
     console.error('[VERIFICATION PAGE] commanders query failed:', commandersError.message)
   }
 
-  const pendingCount = (commanders ?? []).filter(
+  // Active code requests first (they're waiting on an officer right now),
+  // then expired codes, then not-yet-started, then rejected last.
+  const sortedCommanders = [...(commanders ?? [])].sort(
+    (a, b) => getCodeState(a).priority - getCodeState(b).priority
+  )
+
+  const pendingCount = sortedCommanders.filter(
     (c) => c.verification_status === 'code_sent' || c.verification_status === 'pending'
   ).length
 
@@ -209,7 +249,7 @@ export default async function VerificationPage({
       {/* Queue */}
       <div className="glass-card p-5">
 
-        {!commanders || commanders.length === 0 ? (
+        {sortedCommanders.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-4xl mb-3">✅</p>
             <p className="font-semibold text-tactical-900">
@@ -223,24 +263,12 @@ export default async function VerificationPage({
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-tactical-100">
-            {commanders.map((commander) => {
-              const codeRecord = Array.isArray(commander.verification_codes)
-                ? commander.verification_codes[0]
-                : commander.verification_codes
+            {sortedCommanders.map((commander) => {
+              const { codeRecord, hasActiveCode, isExpired } = getCodeState(commander)
 
               const allianceTag = commander.alliance_id
                 ? allianceTagById.get(commander.alliance_id)
                 : undefined
-
-              const hasActiveCode =
-                codeRecord &&
-                !codeRecord.used &&
-                new Date(codeRecord.expires_at) > new Date()
-
-              const isExpired =
-                codeRecord &&
-                !codeRecord.used &&
-                new Date(codeRecord.expires_at) <= new Date()
 
               return (
                 <div key={commander.uid} className="py-4 flex flex-col gap-3">
