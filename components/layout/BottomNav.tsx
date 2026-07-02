@@ -28,10 +28,19 @@ export default function BottomNav({ role, allianceId }: Props) {
     { label: 'Transfers', href: '/transfers',              icon: '🔄' },
   ]
 
+  // Verification is a Supreme/R4/R5 tool that lives at a single unified
+  // route (/verification) — it no longer needs an allianceId to work,
+  // since Supreme has no fixed alliance. Alliance Settings still genuinely
+  // needs an alliance, so it stays gated behind allianceId being present.
   if (['r4', 'r5', 'supreme'].includes(role)) {
     menuItems.push(
-      { label: 'Verification',      href: `${allianceBase}/verification`, icon: '✅' },
-      { label: 'Alliance Settings', href: `${allianceBase}/settings`,     icon: '⚙️' },
+      { label: 'Verification', href: '/verification', icon: '✅' },
+    )
+  }
+
+  if (allianceId && ['r4', 'r5', 'supreme'].includes(role)) {
+    menuItems.push(
+      { label: 'Alliance Settings', href: `${allianceBase}/settings`, icon: '⚙️' },
     )
   }
 
