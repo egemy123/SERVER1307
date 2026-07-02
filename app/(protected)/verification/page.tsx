@@ -121,10 +121,15 @@ export default async function VerificationPage({
 
   const supabase = createAdminClient()
 
-  // Supreme needs the alliance list for the filter chips
+  // Supreme needs the alliance list for the filter chips AND a tag lookup —
+  // fetched separately rather than as an embedded join on commanders,
+  // since embedded joins require a recognized FK relationship in Supabase
+  // and silently return nothing if that relationship isn't set up.
   const alliances = isSupreme
     ? (await supabase.from('alliances').select('id, tag, name').order('tag')).data ?? []
     : []
+
+  const allianceTagById = new Map(alliances.map((a) => [a.id, a.tag]))
 
   let query = supabase
     .from('commanders')
@@ -134,7 +139,6 @@ export default async function VerificationPage({
       role,
       alliance_id,
       verification_status,
-      alliances ( tag ),
       verification_codes (
         code,
         expires_at,
@@ -142,14 +146,19 @@ export default async function VerificationPage({
         attempt_count
       )
     `)
-    .not('verification_status', 'in', '("linked","verified")')
+    .neq('verification_status', 'linked')
+    .neq('verification_status', 'verified')
     .order('verification_status', { ascending: true })
 
   if (effectiveAllianceId) {
     query = query.eq('alliance_id', effectiveAllianceId)
   }
 
-  const { data: commanders } = await query
+  const { data: commanders, error: commandersError } = await query
+
+  if (commandersError) {
+    console.error('[VERIFICATION PAGE] commanders query failed:', commandersError.message)
+  }
 
   const pendingCount = (commanders ?? []).filter(
     (c) => c.verification_status === 'code_sent' || c.verification_status === 'pending'
@@ -219,9 +228,9 @@ export default async function VerificationPage({
                 ? commander.verification_codes[0]
                 : commander.verification_codes
 
-              const allianceTag = Array.isArray(commander.alliances)
-                ? commander.alliances[0]?.tag
-                : (commander.alliances as any)?.tag
+              const allianceTag = commander.alliance_id
+                ? allianceTagById.get(commander.alliance_id)
+                : undefined
 
               const hasActiveCode =
                 codeRecord &&
