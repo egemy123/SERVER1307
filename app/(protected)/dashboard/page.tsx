@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import UTCClock from '@/components/layout/UTCClock'
+import CanyonWeekToggle from '@/components/dashboard/CanyonWeekToggle'
 import { getWeekKey } from '@/lib/utils/utc2'
 import type { Role } from '@/lib/types'
 
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const supabase = createAdminClient()
   const weekKey = getWeekKey()
+  const weekLabel = weekKey.split('-')[1] // e.g. "W27"
 
   const [
     { data: commander },
@@ -27,6 +29,7 @@ export default async function DashboardPage() {
     { data: members },
     { data: inactiveMembers },
     { data: recentLogs },
+    { data: canyonStatus },
   ] = await Promise.all([
     supabase
       .from('commanders')
@@ -82,7 +85,15 @@ export default async function DashboardPage() {
           .order('created_at', { ascending: false })
           .limit(8)
       : Promise.resolve({ data: [] }),
+
+    supabase
+      .from('weekly_canyon_status')
+      .select('active')
+      .eq('week_key', weekKey)
+      .single(),
   ])
+
+  const canyonActive = canyonStatus?.active ?? true // no row yet this week = default ON
 
   const activeCount = (members ?? []).length
   const inactiveCount = (inactiveMembers ?? []).length
@@ -119,8 +130,8 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
 
-      {/* UTC-2 Clock */}
-      <UTCClock />
+      {/* UTC-2 Clock — now also shows the current week label */}
+      <UTCClock weekLabel={weekLabel} />
 
       {/* Welcome */}
       <div>
@@ -132,37 +143,35 @@ export default async function DashboardPage() {
           {weekKey} · {role?.toUpperCase()} ·{' '}
           {allianceId ? 'Alliance active' : 'No alliance assigned'}
         </p>
+
+        <div className="mt-2">
+          <CanyonWeekToggle
+            weekKey={weekKey}
+            initialActive={canyonActive}
+            isSupreme={role === 'supreme'}
+          />
+        </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Stats Row — Current Week and Alliance Status removed (week now
+          lives in the clock bar above; alliance status wasn't needed).
+          Remaining two cards are smaller than before. */}
+      <div className="grid grid-cols-2 gap-3 max-w-sm">
 
-        <div className="stat-card">
+        <div className="stat-card !p-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-tactical-500 font-medium">
               Active Members
             </span>
-            <span className="text-tactical-300 text-lg">👥</span>
+            <span className="text-tactical-300 text-base">👥</span>
           </div>
-          <p className="text-2xl font-semibold text-tactical-900 mt-1">
+          <p className="text-lg font-semibold text-tactical-900 mt-1">
             {activeCount}
           </p>
         </div>
 
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-tactical-500 font-medium">
-              Current Week
-            </span>
-            <span className="text-tactical-300 text-lg">📅</span>
-          </div>
-          <p className="text-2xl font-semibold text-tactical-900 mt-1 font-mono text-lg">
-            {weekKey.split('-')[1]}
-          </p>
-        </div>
-
         <div
-          className={`stat-card ${
+          className={`stat-card !p-3 ${
             inactiveCount > 0
               ? 'border border-amber-300 bg-amber-50/40'
               : ''
@@ -173,7 +182,7 @@ export default async function DashboardPage() {
               Inactive Flags
             </span>
             <span
-              className={`text-lg ${
+              className={`text-base ${
                 inactiveCount > 0 ? 'text-amber-400' : 'text-tactical-300'
               }`}
             >
@@ -181,23 +190,11 @@ export default async function DashboardPage() {
             </span>
           </div>
           <p
-            className={`text-2xl font-semibold mt-1 ${
+            className={`text-lg font-semibold mt-1 ${
               inactiveCount > 0 ? 'text-amber-700' : 'text-tactical-900'
             }`}
           >
             {inactiveCount}
-          </p>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-tactical-500 font-medium">
-              Alliance Status
-            </span>
-            <span className="text-tactical-300 text-lg">🏰</span>
-          </div>
-          <p className="text-sm font-semibold text-green-700 mt-1">
-            Active
           </p>
         </div>
 

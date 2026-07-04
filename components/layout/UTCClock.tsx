@@ -4,7 +4,12 @@
 import { useEffect, useState } from 'react'
 import { getClockDisplay } from '@/lib/utils/utc2'
 
-export default function UTCClock({ compact = false }: { compact?: boolean }) {
+interface Props {
+  compact?:    boolean
+  weekLabel?:  string // e.g. "W27" — shown inline in the date row
+}
+
+export default function UTCClock({ compact = false, weekLabel }: Props) {
   const [mounted, setMounted] = useState(false)
   const [display, setDisplay] = useState(getClockDisplay())
 
@@ -60,6 +65,12 @@ export default function UTCClock({ compact = false }: { compact?: boolean }) {
           </span>
         </span>
 
+        {weekLabel && (
+          <span className="text-xs text-accent-mid font-medium">
+            · {weekLabel}
+          </span>
+        )}
+
         <span className="text-xs text-accent-mid font-medium ml-auto">
           UTC-2
         </span>
@@ -81,7 +92,7 @@ export default function UTCClock({ compact = false }: { compact?: boolean }) {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 mt-1.5">
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-soft" />
 
             <span className="text-xs text-tactical-500">
@@ -93,6 +104,15 @@ export default function UTCClock({ compact = false }: { compact?: boolean }) {
             <span className="text-xs text-tactical-500">
               {display.date}
             </span>
+
+            {weekLabel && (
+              <>
+                <span className="text-xs text-tactical-300">·</span>
+                <span className="text-xs text-tactical-500 font-mono">
+                  {weekLabel}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
