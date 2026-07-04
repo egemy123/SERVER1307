@@ -65,6 +65,16 @@ export async function POST(req: Request) {
         .from('commanders')
         .update({ alliance_id: alliance.id, role: 'r5', status: 'active' })
         .eq('uid', r5_uid)
+
+      // Keep alliance_history consistent with every other place a
+      // commander's alliance changes (admin Move/Transfer, etc.)
+      await supabase.from('alliance_history').insert({
+        commander_uid: r5_uid,
+        alliance_id:   alliance.id,
+        alliance_tag:  alliance.tag,
+        role:          'r5',
+        joined_at:     new Date().toISOString(),
+      })
     }
 
     await writeAuditLog({
