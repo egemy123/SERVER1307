@@ -208,3 +208,64 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
   }
 }
+// DELETE — permanently remove an alliance. Supreme only, and ONLY if the
+// alliance is already 'inactive' (i.e. already disbanded). This is a hard
+// delete of the alliances row itself — it does not touch commanders (they
+// were already unassigned during disband) or alliance_history (kept as a
+// permanent record even after the alliance row is gone).
+export async function DELETE(req: Request) {
+  try {
+    const auth = await requireAuth()
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (auth.role !== 'supreme') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { id } = await req.json()
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+    const supabase = createAdminClient()
+
+    const { data: alliance } = await supabase
+      .from('alliances')
+      .select('id, tag, name, status')
+      .eq('id', id)
+      .single()
+
+    if (!alliance) return NextResponse.json({ error: 'Alliance not found' }, { status: 404 })
+
+    if (alliance.status !== 'inactive') {
+      return NextResponse.json(
+        { error: 'Only inactive (disbanded) alliances can be deleted. Disband it first.' },
+        { status: 400 }
+      )
+    }
+
+    // Safety net — refuse if anyone is still assigned to it somehow
+    const { count } = await supabase
+      .from('commanders')
+      .select('uid', { count: 'exact', head: true })
+      .eq('alliance_id', id)
+
+    if (count && count > 0) {
+      return NextResponse.json(
+        { error: `${count} commander(s) are still assigned to this alliance — cannot delete` },
+        { status: 400 }
+      )
+    }
+
+    const { error } = await supabase.from('alliances').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    await writeAuditLog({
+      action:               'alliance_deleted' as any,
+      performed_by:         auth.commander_uid,
+      performed_by_role:    auth.role as any,
+      performed_by_display: auth.commander_name,
+      metadata:             { deleted_alliance_id: id, tag: alliance.tag, name: alliance.name },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('[ADMIN ALLIANCES DELETE]', err)
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })
+  }
+}

@@ -43,6 +43,8 @@ export default async function DashboardPage() {
       ? supabase
           .from('alliances')
           .select(`
+            tag,
+            name,
             gift_level,
             target_1,
             target_2,
@@ -101,6 +103,7 @@ export default async function DashboardPage() {
   const inactiveCount = (inactiveMembers ?? []).length
   const isR4Plus = ['r4', 'r5', 'supreme'].includes(role)
   const canEditAlliance = role === 'r4' || role === 'r5' || role === 'supreme'
+  const canRenameAlliance = role === 'r5' || role === 'supreme'
 
   const ACTION_LABELS: Record<string, string> = {
     commander_created: 'Commander added',
@@ -230,7 +233,10 @@ export default async function DashboardPage() {
             allianceId={allianceId}
             activeCount={activeCount}
             initialGiftLevel={alliance?.gift_level ?? null}
+            initialTag={alliance?.tag ?? ''}
+            initialName={alliance?.name ?? ''}
             canEdit={canEditAlliance}
+            canRename={canRenameAlliance}
           />
 
           <AllianceTargetsCard
