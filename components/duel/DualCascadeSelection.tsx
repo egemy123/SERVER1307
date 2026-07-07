@@ -23,7 +23,7 @@
  * Designed to match ACC #7C tactical dark aesthetic.
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ function MemberChip({
   return (
     <button
       type="button"
-      onClick={() => onToggle(commander.uid)}
+      onClick={(e) => { e.currentTarget.blur(); onToggle(commander.uid) }}
       className={`
         group relative flex items-center gap-2 rounded-lg border px-2 py-1.5
         transition-all duration-150 select-none cursor-pointer text-left min-w-0
@@ -291,6 +291,10 @@ export default function DualCascadeSelection({
   const minimumOrderRef    = useRef<string[]>([])
   const nonMinimumOrderRef = useRef<string[]>([])
 
+  // Remembers scroll position immediately before a tap reorders the grid,
+  // so we can pin the page back in place instead of it jumping to top.
+  const pendingScrollRef = useRef<number | null>(null)
+
   // ── Derived lists ──────────────────────────────────────────
 
   /** Step 2 pool: everyone NOT in minimumPlayers */
@@ -339,9 +343,20 @@ export default function DualCascadeSelection({
     return [...selected, ...unselected]
   }, [searchedPool, currentSelection, currentOrderRef])
 
+  // Right after the reorder above causes a re-render, snap the scroll
+  // position back to where it was before the tap — runs before paint,
+  // so the user never sees the jump.
+  useLayoutEffect(() => {
+    if (pendingScrollRef.current !== null) {
+      window.scrollTo(0, pendingScrollRef.current)
+      pendingScrollRef.current = null
+    }
+  }, [currentPool])
+
   // ── Handlers ───────────────────────────────────────────────
 
   const toggle = useCallback((uid: string) => {
+    pendingScrollRef.current = window.scrollY
     setCurrentSelection((prev) => {
       const next = new Set(prev)
       if (next.has(uid)) {
@@ -356,6 +371,7 @@ export default function DualCascadeSelection({
   }, [setCurrentSelection, currentOrderRef])
 
   const selectAllVisible = useCallback(() => {
+    pendingScrollRef.current = window.scrollY
     setCurrentSelection((prev) => {
       const next = new Set(prev)
       currentPool.forEach((m) => {
@@ -369,6 +385,7 @@ export default function DualCascadeSelection({
   }, [currentPool, setCurrentSelection, currentOrderRef])
 
   const clearSelection = useCallback(() => {
+    pendingScrollRef.current = window.scrollY
     currentOrderRef.current = []
     setCurrentSelection(new Set())
   }, [setCurrentSelection, currentOrderRef])
