@@ -17,13 +17,18 @@
  * decision by leadership and is the ONLY thing that determines
  * duel points for the day. It is never inferred from steps 1-3.
  *
- * Member grid is dense (2 cols mobile / 4 cols desktop) so a
- * 100-member alliance stays scannable without endless scrolling.
+ * SELECTION UI (steps 1 & 2):
+ * Two fixed, separate sections — "Selected" and "Remaining" — instead
+ * of one reordering grid. Tapping a commander moves them between
+ * sections; it never reorders or scrolls anything. The Remaining list
+ * is always alphabetical and never changes order — it only shrinks.
+ * No animations, no auto-scroll, no layout jumps. Selecting from a
+ * 100-member roster should feel completely stable.
  *
  * Designed to match ACC #7C tactical dark aesthetic.
  */
 
-import { useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -56,13 +61,12 @@ const ROLE_LABELS: Record<Commander['role'], string> = {
   r1: 'R1', r2: 'R2', r3: 'R3', r4: 'R4', r5: 'R5',
 }
 
-const ROLE_ORDER: Record<Commander['role'], number> = {
-  r5: 0, r4: 1, r3: 2, r2: 3, r1: 4,
-}
-
 // ── Sub-components ────────────────────────────────────────────
 
-/** Single member chip — sized for a dense 2/4-column grid */
+/**
+ * Single member chip. No transitions on layout-affecting properties —
+ * only an instant color/border swap on selection, no transform, no fade.
+ */
 function MemberChip({
   commander,
   selected,
@@ -82,8 +86,8 @@ function MemberChip({
     .slice(0, 2)
 
   const selectedStyles = {
-    green:   'border-green-500 bg-green-500/15 text-green-300 shadow-[0_0_0_1px_rgba(34,197,94,0.4)]',
-    amber:   'border-amber-400 bg-amber-400/15 text-amber-300 shadow-[0_0_0_1px_rgba(251,191,36,0.4)]',
+    green:   'border-green-500 bg-green-500/15 text-green-300',
+    amber:   'border-amber-400 bg-amber-400/15 text-amber-300',
     neutral: 'border-tactical-400 bg-tactical-400/10 text-tactical-200',
   }
 
@@ -95,14 +99,13 @@ function MemberChip({
       onClick={(e) => { e.currentTarget.blur(); onToggle(commander.uid) }}
       className={`
         group relative flex items-center gap-2 rounded-lg border px-2 py-1.5
-        transition-all duration-150 select-none cursor-pointer text-left min-w-0
+        select-none cursor-pointer text-left min-w-0
         ${selected ? selectedStyles[variant] : idleStyle}
       `}
     >
       {/* Avatar */}
       <div className={`
         w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-bold
-        transition-colors duration-150
         ${selected
           ? variant === 'green'  ? 'bg-green-500/30 text-green-300'
           : variant === 'amber'  ? 'bg-amber-400/30 text-amber-300'
@@ -154,12 +157,11 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
       {steps.map((s, i) => (
         <div key={s.n} className="flex items-center flex-1">
           {i > 0 && (
-            <div className={`h-px flex-1 transition-colors duration-300 ${step > i ? 'bg-green-500' : 'bg-white/10'}`} />
+            <div className={`h-px flex-1 ${step > i ? 'bg-green-500' : 'bg-white/10'}`} />
           )}
           <div className="flex flex-col items-center gap-1 shrink-0">
             <div className={`
               w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold
-              transition-all duration-300
               ${step > s.n  ? 'bg-green-500 text-white'
               : step === s.n ? 'bg-green-500/20 border-2 border-green-500 text-green-400'
               :                'bg-white/5 border border-white/10 text-tactical-600'}
@@ -236,8 +238,8 @@ function ResultChip({
   onSelect: () => void
 }) {
   const selectedStyles = {
-    green: 'border-green-500 bg-green-500/15 text-green-300 shadow-[0_0_0_1px_rgba(34,197,94,0.4)]',
-    red:   'border-red-500 bg-red-500/15 text-red-300 shadow-[0_0_0_1px_rgba(239,68,68,0.4)]',
+    green: 'border-green-500 bg-green-500/15 text-green-300',
+    red:   'border-red-500 bg-red-500/15 text-red-300',
   }
   const idleStyle = 'border-white/10 bg-white/5 text-tactical-400 hover:border-white/20 hover:bg-white/8 hover:text-tactical-200'
 
@@ -247,7 +249,7 @@ function ResultChip({
       onClick={onSelect}
       className={`
         flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-8
-        transition-all duration-150 select-none cursor-pointer
+        select-none cursor-pointer
         ${selected ? selectedStyles[variant] : idleStyle}
       `}
     >
@@ -272,9 +274,11 @@ export default function DualCascadeSelection({
   minimumScore,
   onComplete,
 }: DualCascadeSelectionProps) {
-  // Sort members by role rank (R5 first)
-  const sortedMembers = useMemo(
-    () => [...members].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role]),
+  // Fixed alphabetical order — this NEVER changes, regardless of selection.
+  // Both "Selected" and "Remaining" sections are filtered views of this
+  // same stable array, so items never jump around when toggled.
+  const alphabeticalMembers = useMemo(
+    () => [...members].sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [members]
   )
 
@@ -285,110 +289,63 @@ export default function DualCascadeSelection({
   const [search, setSearch] = useState('')
   const [result, setResult] = useState<DuelResult | null>(null)
 
-  // Tracks the order commanders were tapped, per step, so the selected
-  // group can float to the top in "most recently selected first" order
-  // instead of jumping back to role order.
-  const minimumOrderRef    = useRef<string[]>([])
-  const nonMinimumOrderRef = useRef<string[]>([])
-
-  // Remembers scroll position immediately before a tap reorders the grid,
-  // so we can pin the page back in place instead of it jumping to top.
-  const pendingScrollRef = useRef<number | null>(null)
-
   // ── Derived lists ──────────────────────────────────────────
 
-  /** Step 2 pool: everyone NOT in minimumPlayers */
-  const step2Pool = useMemo(
-    () => sortedMembers.filter((m) => !minimumUids.has(m.uid)),
-    [sortedMembers, minimumUids]
+  /** Step 2 eligible pool: everyone NOT already in minimumPlayers, alphabetical, fixed order */
+  const step2Eligible = useMemo(
+    () => alphabeticalMembers.filter((m) => !minimumUids.has(m.uid)),
+    [alphabeticalMembers, minimumUids]
   )
 
   /** Absent = all members minus minimum minus nonMinimum */
   const absentMembers = useMemo(
-    () => sortedMembers.filter(
+    () => alphabeticalMembers.filter(
       (m) => !minimumUids.has(m.uid) && !nonMinimumUids.has(m.uid)
     ),
-    [sortedMembers, minimumUids, nonMinimumUids]
+    [alphabeticalMembers, minimumUids, nonMinimumUids]
   )
-
-  /** Filtered pool for current step based on search */
-  const searchedPool = useMemo(() => {
-    const pool = step === 1 ? sortedMembers : step2Pool
-    const q = search.trim().toLowerCase()
-    if (!q) return pool
-    return pool.filter((m) => m.displayName.toLowerCase().includes(q))
-  }, [step, sortedMembers, step2Pool, search])
 
   const currentSelection = step === 1 ? minimumUids : nonMinimumUids
   const setCurrentSelection = step === 1 ? setMinimumUids : setNonMinimumUids
-  const currentOrderRef = step === 1 ? minimumOrderRef : nonMinimumOrderRef
+  const eligiblePool = step === 1 ? alphabeticalMembers : step2Eligible
 
-  /**
-   * Display pool: selected commanders float to the top (most recently
-   * selected first), unselected stay below in normal role order. Makes
-   * large rosters (100 members) easy to scan — once you tap someone, they
-   * park at the top instead of staying buried in the grid.
-   */
-  const currentPool = useMemo(() => {
-    const selected: Commander[] = []
-    const unselected: Commander[] = []
-    for (const m of searchedPool) {
-      if (currentSelection.has(m.uid)) selected.push(m)
-      else unselected.push(m)
-    }
-    // Most-recently-selected first
-    selected.sort(
-      (a, b) => currentOrderRef.current.indexOf(b.uid) - currentOrderRef.current.indexOf(a.uid)
-    )
-    return [...selected, ...unselected]
-  }, [searchedPool, currentSelection, currentOrderRef])
+  /** Selected commanders for the current step, alphabetical, fixed order */
+  const selectedList = useMemo(
+    () => eligiblePool.filter((m) => currentSelection.has(m.uid)),
+    [eligiblePool, currentSelection]
+  )
 
-  // Right after the reorder above causes a re-render, snap the scroll
-  // position back to where it was before the tap — runs before paint,
-  // so the user never sees the jump.
-  useLayoutEffect(() => {
-    if (pendingScrollRef.current !== null) {
-      window.scrollTo(0, pendingScrollRef.current)
-      pendingScrollRef.current = null
-    }
-  }, [currentPool])
+  /** Remaining (unselected) commanders for the current step — alphabetical, NEVER reordered */
+  const remainingList = useMemo(
+    () => eligiblePool.filter((m) => !currentSelection.has(m.uid)),
+    [eligiblePool, currentSelection]
+  )
+
+  const q = search.trim().toLowerCase()
+  const selectedListFiltered  = q ? selectedList.filter(m => m.displayName.toLowerCase().includes(q))  : selectedList
+  const remainingListFiltered = q ? remainingList.filter(m => m.displayName.toLowerCase().includes(q)) : remainingList
 
   // ── Handlers ───────────────────────────────────────────────
 
   const toggle = useCallback((uid: string) => {
-    pendingScrollRef.current = window.scrollY
     setCurrentSelection((prev) => {
       const next = new Set(prev)
-      if (next.has(uid)) {
-        next.delete(uid)
-        currentOrderRef.current = currentOrderRef.current.filter((u) => u !== uid)
-      } else {
-        next.add(uid)
-        currentOrderRef.current = [...currentOrderRef.current, uid]
-      }
+      next.has(uid) ? next.delete(uid) : next.add(uid)
       return next
     })
-  }, [setCurrentSelection, currentOrderRef])
+  }, [setCurrentSelection])
 
   const selectAllVisible = useCallback(() => {
-    pendingScrollRef.current = window.scrollY
     setCurrentSelection((prev) => {
       const next = new Set(prev)
-      currentPool.forEach((m) => {
-        if (!next.has(m.uid)) {
-          next.add(m.uid)
-          currentOrderRef.current = [...currentOrderRef.current, m.uid]
-        }
-      })
+      remainingListFiltered.forEach((m) => next.add(m.uid))
       return next
     })
-  }, [currentPool, setCurrentSelection, currentOrderRef])
+  }, [remainingListFiltered, setCurrentSelection])
 
   const clearSelection = useCallback(() => {
-    pendingScrollRef.current = window.scrollY
-    currentOrderRef.current = []
     setCurrentSelection(new Set())
-  }, [setCurrentSelection, currentOrderRef])
+  }, [setCurrentSelection])
 
   const handleNext = useCallback(() => {
     setSearch('')
@@ -432,7 +389,7 @@ export default function DualCascadeSelection({
   // ── Render ─────────────────────────────────────────────────
   return (
     <div
-      className="flex flex-col gap-5 animate-fade-in"
+      className="flex flex-col gap-5"
       style={{ fontFamily: "'Rajdhani', 'Inter', sans-serif" }}
     >
 
@@ -464,12 +421,9 @@ export default function DualCascadeSelection({
             <span className={`text-sm font-bold tabular-nums ${
               step === 1 ? 'text-green-400' : 'text-amber-400'
             }`}>
-              {step === 1
-                ? minimumUids.size
-                : nonMinimumUids.size
-              }
+              {selectedList.length}
               <span className="text-tactical-600 font-normal">
-                {' '}/ {step === 1 ? sortedMembers.length : step2Pool.length}
+                {' '}/ {eligiblePool.length}
               </span>
             </span>
           </div>
@@ -485,44 +439,81 @@ export default function DualCascadeSelection({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search commanders…"
-                className="w-full rounded-xl border border-white/10 bg-white/5 pl-8 pr-3 py-2.5 text-sm text-tactical-200 placeholder:text-tactical-600 focus:outline-none focus:border-white/20 transition-colors"
+                className="w-full rounded-xl border border-white/10 bg-white/5 pl-8 pr-3 py-2.5 text-sm text-tactical-200 placeholder:text-tactical-600 focus:outline-none focus:border-white/20"
               />
             </div>
             <button
               type="button"
               onClick={selectAllVisible}
-              className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+              className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-tactical-400 hover:border-white/20 hover:text-tactical-200"
             >
               All
             </button>
             <button
               type="button"
               onClick={clearSelection}
-              className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+              className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-tactical-400 hover:border-white/20 hover:text-tactical-200"
             >
               Clear
             </button>
           </div>
 
-          {/* Member grid — dense 2/4-column layout for 100-member alliances */}
-          <div className="glass-card p-3">
-            {currentPool.length === 0 ? (
-              <p className="text-center py-8 text-sm text-tactical-500">
-                {search ? 'No members match your search' : 'No members available'}
+          {/* ── SELECTED SECTION — fixed at top, grows downward only ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <p className={`text-xs font-bold uppercase tracking-wide ${step === 1 ? 'text-green-400' : 'text-amber-400'}`}>
+                Selected Commanders
               </p>
-            ) : (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
-                {currentPool.map((commander) => (
-                  <MemberChip
-                    key={commander.uid}
-                    commander={commander}
-                    selected={currentSelection.has(commander.uid)}
-                    variant={step === 1 ? 'green' : 'amber'}
-                    onToggle={toggle}
-                  />
-                ))}
-              </div>
-            )}
+              <span className="text-xs text-tactical-600">({selectedListFiltered.length})</span>
+            </div>
+            <div className="glass-card p-3 min-h-[64px]">
+              {selectedListFiltered.length === 0 ? (
+                <p className="text-center py-4 text-xs text-tactical-600">
+                  No one selected yet — tap commanders below
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+                  {selectedListFiltered.map((commander) => (
+                    <MemberChip
+                      key={commander.uid}
+                      commander={commander}
+                      selected={true}
+                      variant={step === 1 ? 'green' : 'amber'}
+                      onToggle={toggle}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── REMAINING SECTION — always alphabetical, only shrinks ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-tactical-500">
+                Remaining Commanders
+              </p>
+              <span className="text-xs text-tactical-600">({remainingListFiltered.length})</span>
+            </div>
+            <div className="glass-card p-3">
+              {remainingListFiltered.length === 0 ? (
+                <p className="text-center py-8 text-sm text-tactical-500">
+                  {search ? 'No members match your search' : 'Everyone has been classified'}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+                  {remainingListFiltered.map((commander) => (
+                    <MemberChip
+                      key={commander.uid}
+                      commander={commander}
+                      selected={false}
+                      variant={step === 1 ? 'green' : 'amber'}
+                      onToggle={toggle}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Navigation */}
@@ -531,7 +522,7 @@ export default function DualCascadeSelection({
               <button
                 type="button"
                 onClick={handleBack}
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200"
               >
                 ← Back
               </button>
@@ -540,14 +531,14 @@ export default function DualCascadeSelection({
               type="button"
               onClick={step === 1 ? handleNext : handleFinish}
               className={`
-                flex-1 rounded-xl py-3 text-sm font-bold transition-all duration-150
+                flex-1 rounded-xl py-3 text-sm font-bold
                 ${step === 1
                   ? 'bg-green-600 hover:bg-green-500 text-white'
                   : 'bg-amber-500 hover:bg-amber-400 text-black'}
               `}
             >
               {step === 1
-                ? `Next: Non-Minimum (${step2Pool.length - nonMinimumUids.size} remaining) →`
+                ? `Next: Non-Minimum (${step2Eligible.length - nonMinimumUids.size} remaining) →`
                 : `Finish — ${absentMembers.length} absent →`
               }
             </button>
@@ -614,14 +605,14 @@ export default function DualCascadeSelection({
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200"
             >
               ← Edit
             </button>
             <button
               type="button"
               onClick={handleGoToResult}
-              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 py-3 text-sm font-bold text-white transition-colors"
+              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 py-3 text-sm font-bold text-white"
             >
               Next: Alliance Result →
             </button>
@@ -668,7 +659,7 @@ export default function DualCascadeSelection({
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200"
             >
               ← Edit
             </button>
@@ -676,7 +667,7 @@ export default function DualCascadeSelection({
               type="button"
               onClick={handleComplete}
               disabled={!result}
-              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed py-3 text-sm font-bold text-white transition-colors"
+              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed py-3 text-sm font-bold text-white"
             >
               Confirm & Submit ✓
             </button>
