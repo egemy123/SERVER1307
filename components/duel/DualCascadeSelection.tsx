@@ -23,7 +23,7 @@
  * Designed to match ACC #7C tactical dark aesthetic.
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -285,6 +285,12 @@ export default function DualCascadeSelection({
   const [search, setSearch] = useState('')
   const [result, setResult] = useState<DuelResult | null>(null)
 
+  // Tracks the order commanders were tapped, per step, so the selected
+  // group can float to the top in "most recently selected first" order
+  // instead of jumping back to role order.
+  const minimumOrderRef    = useRef<string[]>([])
+  const nonMinimumOrderRef = useRef<string[]>([])
+
   // ── Derived lists ──────────────────────────────────────────
 
   /** Step 2 pool: everyone NOT in minimumPlayers */
@@ -302,7 +308,7 @@ export default function DualCascadeSelection({
   )
 
   /** Filtered pool for current step based on search */
-  const currentPool = useMemo(() => {
+  const searchedPool = useMemo(() => {
     const pool = step === 1 ? sortedMembers : step2Pool
     const q = search.trim().toLowerCase()
     if (!q) return pool
@@ -311,28 +317,61 @@ export default function DualCascadeSelection({
 
   const currentSelection = step === 1 ? minimumUids : nonMinimumUids
   const setCurrentSelection = step === 1 ? setMinimumUids : setNonMinimumUids
+  const currentOrderRef = step === 1 ? minimumOrderRef : nonMinimumOrderRef
+
+  /**
+   * Display pool: selected commanders float to the top (most recently
+   * selected first), unselected stay below in normal role order. Makes
+   * large rosters (100 members) easy to scan — once you tap someone, they
+   * park at the top instead of staying buried in the grid.
+   */
+  const currentPool = useMemo(() => {
+    const selected: Commander[] = []
+    const unselected: Commander[] = []
+    for (const m of searchedPool) {
+      if (currentSelection.has(m.uid)) selected.push(m)
+      else unselected.push(m)
+    }
+    // Most-recently-selected first
+    selected.sort(
+      (a, b) => currentOrderRef.current.indexOf(b.uid) - currentOrderRef.current.indexOf(a.uid)
+    )
+    return [...selected, ...unselected]
+  }, [searchedPool, currentSelection, currentOrderRef])
 
   // ── Handlers ───────────────────────────────────────────────
 
   const toggle = useCallback((uid: string) => {
     setCurrentSelection((prev) => {
       const next = new Set(prev)
-      next.has(uid) ? next.delete(uid) : next.add(uid)
+      if (next.has(uid)) {
+        next.delete(uid)
+        currentOrderRef.current = currentOrderRef.current.filter((u) => u !== uid)
+      } else {
+        next.add(uid)
+        currentOrderRef.current = [...currentOrderRef.current, uid]
+      }
       return next
     })
-  }, [setCurrentSelection])
+  }, [setCurrentSelection, currentOrderRef])
 
   const selectAllVisible = useCallback(() => {
     setCurrentSelection((prev) => {
       const next = new Set(prev)
-      currentPool.forEach((m) => next.add(m.uid))
+      currentPool.forEach((m) => {
+        if (!next.has(m.uid)) {
+          next.add(m.uid)
+          currentOrderRef.current = [...currentOrderRef.current, m.uid]
+        }
+      })
       return next
     })
-  }, [currentPool, setCurrentSelection])
+  }, [currentPool, setCurrentSelection, currentOrderRef])
 
   const clearSelection = useCallback(() => {
+    currentOrderRef.current = []
     setCurrentSelection(new Set())
-  }, [setCurrentSelection])
+  }, [setCurrentSelection, currentOrderRef])
 
   const handleNext = useCallback(() => {
     setSearch('')
