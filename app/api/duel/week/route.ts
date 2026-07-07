@@ -23,17 +23,21 @@ export async function GET(req: Request) {
       { data: members },
     ] = await Promise.all([
       supabase.from('duel_weeks').select('*').eq('alliance_id', allianceId).eq('week_key', weekKey).single(),
-      supabase.from('commanders').select('uid, name').eq('alliance_id', allianceId).eq('status', 'active').order('name'),
+      supabase.from('commanders').select('uid, name, role').eq('alliance_id', allianceId).eq('status', 'active').order('name'),
     ])
 
     let entries: any[] = []
+    let dayResults: any[] = []
     if (week) {
-      const { data } = await supabase
-        .from('duel_entries').select('*').eq('duel_week_id', week.id)
-      entries = data ?? []
+      const [{ data: entryData }, { data: resultData }] = await Promise.all([
+        supabase.from('duel_entries').select('*').eq('duel_week_id', week.id),
+        supabase.from('duel_day_results').select('*').eq('duel_week_id', week.id),
+      ])
+      entries    = entryData ?? []
+      dayResults = resultData ?? []
     }
 
-    return NextResponse.json({ week, members, entries })
+    return NextResponse.json({ week, members, entries, day_results: dayResults })
   } catch (err) {
     console.error('[DUEL WEEK GET]', err)
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })

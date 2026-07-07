@@ -116,6 +116,30 @@ export interface DuelEntry {
   created_at: string
 }
 
+// ─── DUEL — ALLIANCE VICTORY TRACK ───────────
+// Commander Performance Track (DuelEntry.status above) is
+// participation-only and awards ZERO points. Points come ONLY
+// from DuelDayResult — one manual Victory/Defeat decision per
+// alliance per locked day. Never infer this from status.
+export type DuelResult = 'victory' | 'defeat'
+
+export interface DuelDayResult {
+  id: string
+  duel_week_id: string
+  day: DuelDay
+  minimum_score: number | null
+  result: DuelResult
+  decided_by: string
+  decided_at: string
+  created_at: string
+}
+
+/** Points awarded for a day, based ONLY on the Alliance Victory Track. */
+export function pointsForDay(day: DuelDay, result: DuelResult | null | undefined): number {
+  if (result !== 'victory') return 0
+  return DUEL_POINT_VALUES[day]
+}
+
 // ─── DSB ─────────────────────────────────────
 export type DSBState = 'pending' | 'registration_open' | 'registration_closed' | 'battle' | 'complete'
 export type DSBSlot = '09:00' | '18:00' | '23:00'
@@ -260,6 +284,22 @@ export interface QuickEntryPayload {
   participated: string[]
   below_minimum: string[]
   absent: string[]
+  result: DuelResult
+}
+
+// ─── DETAILED ENTRY PAYLOAD ──────────────────
+export interface DetailedEntryScore {
+  commander_uid: string
+  score: number
+}
+
+export interface DetailedEntryPayload {
+  week_id: string
+  alliance_id: string
+  day: DuelDay
+  minimum_score: number
+  scores: DetailedEntryScore[]
+  result: DuelResult
 }
 
 // ─── API RESPONSES ────────────────────────────

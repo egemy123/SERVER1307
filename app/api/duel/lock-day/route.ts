@@ -13,13 +13,19 @@ export async function POST(req: Request) {
       duel_week_id,
       day,
       minimum_score,
-      participated,   // string[] — UIDs who submitted score
-      below_minimum,  // string[] — UIDs who scored below minimum
-      absent,         // string[] — auto-calculated
+      participated,   // string[] — UIDs who submitted score           (Simple Mode)
+      below_minimum,  // string[] — UIDs who scored below minimum      (Simple Mode)
+      absent,         // string[] — auto-calculated                    (Simple Mode)
+      scores,         // { commander_uid, score }[]                    (Detailed Mode)
+      result,         // 'victory' | 'defeat' — Alliance Victory Track (REQUIRED, both modes)
     } = await req.json()
 
     if (!duel_week_id || !day) {
       return NextResponse.json({ error: 'duel_week_id and day required' }, { status: 400 })
+    }
+
+    if (result !== 'victory' && result !== 'defeat') {
+      return NextResponse.json({ error: 'result (victory or defeat) is required' }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -51,58 +57,55 @@ export async function POST(req: Request) {
     }
 
     const now = new Date().toISOString()
+    const min = typeof minimum_score === 'number' ? minimum_score : null
 
-    // Update minimum score on week if provided
-    if (minimum_score && week.mode === 'quick') {
-      await supabase
-        .from('duel_weeks')
-        .update({ minimum_score })
-        .eq('id', duel_week_id)
-    }
-
-    // Build entries array
+    // ── Build Commander Performance Track entries (participation only — NO points) ──
+    // These are informational: used for warnings/analytics/leadership review.
+    // They must never be read as a source of duel points.
     const entries: any[] = []
 
-    // Passed entries
-    for (const uid of (participated ?? []).filter((u: string) => !(below_minimum ?? []).includes(u))) {
-      entries.push({
-        duel_week_id,
-        commander_uid: uid,
-        day,
-        status:        'passed',
-        day_locked:    true,
-        locked_at:     now,
-        locked_by:     auth.commander_uid,
-      })
+    if (Array.isArray(scores) && scores.length > 0) {
+      // ── Detailed Mode: derive status from actual scores ──
+      for (const { commander_uid, score } of scores) {
+        let status: 'passed' | 'below_minimum' | 'absent'
+        if (!score || score === 0) status = 'absent'
+        else if (min !== null && score < min) status = 'below_minimum'
+        else status = 'passed'
+
+        entries.push({
+          duel_week_id,
+          commander_uid,
+          day,
+          status,
+          score:      score ?? 0,
+          day_locked: true,
+          locked_at:  now,
+          locked_by:  auth.commander_uid,
+        })
+      }
+    } else {
+      // ── Simple Mode: leadership already classified everyone via cascade ──
+      for (const uid of (participated ?? []).filter((u: string) => !(below_minimum ?? []).includes(u))) {
+        entries.push({
+          duel_week_id, commander_uid: uid, day,
+          status: 'passed', day_locked: true, locked_at: now, locked_by: auth.commander_uid,
+        })
+      }
+      for (const uid of (below_minimum ?? [])) {
+        entries.push({
+          duel_week_id, commander_uid: uid, day,
+          status: 'below_minimum', day_locked: true, locked_at: now, locked_by: auth.commander_uid,
+        })
+      }
+      for (const uid of (absent ?? [])) {
+        entries.push({
+          duel_week_id, commander_uid: uid, day,
+          status: 'absent', day_locked: true, locked_at: now, locked_by: auth.commander_uid,
+        })
+      }
     }
 
-    // Below minimum entries
-    for (const uid of (below_minimum ?? [])) {
-      entries.push({
-        duel_week_id,
-        commander_uid: uid,
-        day,
-        status:        'below_minimum',
-        day_locked:    true,
-        locked_at:     now,
-        locked_by:     auth.commander_uid,
-      })
-    }
-
-    // Absent entries
-    for (const uid of (absent ?? [])) {
-      entries.push({
-        duel_week_id,
-        commander_uid: uid,
-        day,
-        status:        'absent',
-        day_locked:    true,
-        locked_at:     now,
-        locked_by:     auth.commander_uid,
-      })
-    }
-
-    // Upsert all entries
+    // Upsert Commander Performance Track entries
     if (entries.length > 0) {
       const { error: upsertErr } = await supabase
         .from('duel_entries')
@@ -113,8 +116,28 @@ export async function POST(req: Request) {
       }
     }
 
-    // Flag absent members as inactive
-    const absentUids = absent ?? []
+    // ── Alliance Victory Track — the ONLY source of duel points ──
+    // Independent of every commander's performance above.
+    const { error: resultErr } = await supabase
+      .from('duel_day_results')
+      .upsert({
+        duel_week_id,
+        day,
+        minimum_score: min,
+        result,
+        decided_by:    auth.commander_uid,
+        decided_at:    now,
+      }, { onConflict: 'duel_week_id,day' })
+
+    if (resultErr) {
+      return NextResponse.json({ error: resultErr.message }, { status: 500 })
+    }
+
+    // Flag absent members as inactive (Commander Performance Track side-effect only)
+    const absentUids = Array.isArray(scores) && scores.length > 0
+      ? entries.filter(e => e.status === 'absent').map(e => e.commander_uid)
+      : (absent ?? [])
+
     if (absentUids.length > 0) {
       await supabase
         .from('commanders')
@@ -123,7 +146,6 @@ export async function POST(req: Request) {
         .eq('alliance_id', week.alliance_id)
         .eq('inactive_flagged', false)
 
-      // Create notifications for R4/R5
       const notifInserts = absentUids.map(async (uid: string) => {
         const { data: cmd } = await supabase
           .from('commanders').select('name, inactive_flagged').eq('uid', uid).single()
@@ -149,10 +171,11 @@ export async function POST(req: Request) {
       metadata: {
         day,
         week_key:      week.week_key,
-        passed:        (participated ?? []).length - (below_minimum ?? []).length,
-        below_minimum: (below_minimum ?? []).length,
-        absent:        (absent ?? []).length,
-        minimum_score,
+        result,
+        passed:        entries.filter(e => e.status === 'passed').length,
+        below_minimum: entries.filter(e => e.status === 'below_minimum').length,
+        absent:        absentUids.length,
+        minimum_score: min,
       },
     })
 

@@ -3,10 +3,22 @@
 /**
  * DualCascadeSelection
  * ─────────────────────────────────────────────────────────────
- * Three-step cascade for weekly Dual attendance classification.
- * Step 1 → Minimum Score achieved
- * Step 2 → Participated but below minimum
- * Step 3 → Summary (absent = everyone else)
+ * Four-step cascade for weekly Dual attendance classification.
+ * Step 1 → Minimum Score achieved           (Commander Performance Track)
+ * Step 2 → Participated but below minimum   (Commander Performance Track)
+ * Step 3 → Summary                          (Commander Performance Track)
+ * Step 4 → Alliance Result: Victory/Defeat  (Alliance Victory Track)
+ *
+ * IMPORTANT: Steps 1-3 (minimum/below-minimum/absent) are the
+ * Commander Performance Track. They are used ONLY for participation
+ * monitoring, warnings, and analytics — they award ZERO duel points.
+ *
+ * Step 4 is the Alliance Victory Track. It is a separate, manual
+ * decision by leadership and is the ONLY thing that determines
+ * duel points for the day. It is never inferred from steps 1-3.
+ *
+ * Member grid is dense (2 cols mobile / 4 cols desktop) so a
+ * 100-member alliance stays scannable without endless scrolling.
  *
  * Designed to match ACC #7C tactical dark aesthetic.
  */
@@ -23,10 +35,13 @@ interface Commander {
   role: 'r1' | 'r2' | 'r3' | 'r4' | 'r5'
 }
 
+type DuelResult = 'victory' | 'defeat'
+
 interface DualResult {
-  minimumPlayers: string[]     // uids
-  nonMinimumPlayers: string[]  // uids
-  absentPlayers: string[]      // uids
+  minimumPlayers: string[]     // uids — Commander Performance Track only, no points
+  nonMinimumPlayers: string[]  // uids — Commander Performance Track only, no points
+  absentPlayers: string[]      // uids — Commander Performance Track only, no points
+  result: DuelResult           // Alliance Victory Track — the only source of points
 }
 
 interface DualCascadeSelectionProps {
@@ -47,7 +62,7 @@ const ROLE_ORDER: Record<Commander['role'], number> = {
 
 // ── Sub-components ────────────────────────────────────────────
 
-/** Single member chip */
+/** Single member chip — sized for a dense 2/4-column grid */
 function MemberChip({
   commander,
   selected,
@@ -79,14 +94,14 @@ function MemberChip({
       type="button"
       onClick={() => onToggle(commander.uid)}
       className={`
-        group relative flex items-center gap-2.5 rounded-xl border px-3 py-2
-        transition-all duration-150 select-none cursor-pointer text-left
+        group relative flex items-center gap-2 rounded-lg border px-2 py-1.5
+        transition-all duration-150 select-none cursor-pointer text-left min-w-0
         ${selected ? selectedStyles[variant] : idleStyle}
       `}
     >
       {/* Avatar */}
       <div className={`
-        w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold
+        w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-bold
         transition-colors duration-150
         ${selected
           ? variant === 'green'  ? 'bg-green-500/30 text-green-300'
@@ -103,10 +118,10 @@ function MemberChip({
 
       {/* Name + role */}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-tight truncate">
+        <p className="text-xs font-semibold leading-tight truncate">
           {commander.displayName}
         </p>
-        <p className={`text-xs leading-tight mt-0.5 ${selected ? 'opacity-70' : 'text-tactical-600'}`}>
+        <p className={`text-[10px] leading-tight mt-0.5 ${selected ? 'opacity-70' : 'text-tactical-600'}`}>
           {ROLE_LABELS[commander.role]}
         </p>
       </div>
@@ -114,7 +129,7 @@ function MemberChip({
       {/* Check mark */}
       {selected && (
         <span className={`
-          shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
+          shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold
           ${variant === 'green' ? 'bg-green-500 text-white'
           : variant === 'amber' ? 'bg-amber-400 text-black'
           :                       'bg-white/20 text-white'}
@@ -127,11 +142,12 @@ function MemberChip({
 }
 
 /** Step progress bar */
-function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
+function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
   const steps = [
     { n: 1, label: 'Minimum Score' },
     { n: 2, label: 'Non-Minimum' },
     { n: 3, label: 'Summary' },
+    { n: 4, label: 'Result' },
   ]
   return (
     <div className="flex items-center gap-0">
@@ -191,18 +207,61 @@ function SummaryCard({
           {count}
         </span>
       </div>
-      <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
         {members.length === 0 ? (
-          <p className="text-xs text-tactical-600 italic">None</p>
+          <p className="text-xs text-tactical-600 italic col-span-full">None</p>
         ) : members.map((m) => (
-          <div key={m.uid} className="flex items-center gap-2">
+          <div key={m.uid} className="flex items-center gap-1.5 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${styles.text} bg-current`} />
-            <span className="text-sm text-tactical-300 truncate">{m.displayName}</span>
-            <span className="text-xs text-tactical-600 ml-auto shrink-0">{ROLE_LABELS[m.role]}</span>
+            <span className="text-xs text-tactical-300 truncate">{m.displayName}</span>
           </div>
         ))}
       </div>
     </div>
+  )
+}
+
+/** Victory / Defeat chip — large single-select chip, same interaction language as MemberChip */
+function ResultChip({
+  label,
+  icon,
+  selected,
+  variant,
+  onSelect,
+}: {
+  label: string
+  icon: string
+  selected: boolean
+  variant: 'green' | 'red'
+  onSelect: () => void
+}) {
+  const selectedStyles = {
+    green: 'border-green-500 bg-green-500/15 text-green-300 shadow-[0_0_0_1px_rgba(34,197,94,0.4)]',
+    red:   'border-red-500 bg-red-500/15 text-red-300 shadow-[0_0_0_1px_rgba(239,68,68,0.4)]',
+  }
+  const idleStyle = 'border-white/10 bg-white/5 text-tactical-400 hover:border-white/20 hover:bg-white/8 hover:text-tactical-200'
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`
+        flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-8
+        transition-all duration-150 select-none cursor-pointer
+        ${selected ? selectedStyles[variant] : idleStyle}
+      `}
+    >
+      <span className="text-3xl">{icon}</span>
+      <span className="text-base font-bold">{label}</span>
+      {selected && (
+        <span className={`
+          mt-1 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold
+          ${variant === 'green' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}
+        `}>
+          ✓
+        </span>
+      )}
+    </button>
   )
 }
 
@@ -220,10 +279,11 @@ export default function DualCascadeSelection({
   )
 
   // ── State ──────────────────────────────────────────────────
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [minimumUids, setMinimumUids] = useState<Set<string>>(new Set())
   const [nonMinimumUids, setNonMinimumUids] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [result, setResult] = useState<DuelResult | null>(null)
 
   // ── Derived lists ──────────────────────────────────────────
 
@@ -284,17 +344,24 @@ export default function DualCascadeSelection({
     setStep(3)
   }, [])
 
+  /** Step 3 → Step 4: move from performance summary to the result step */
+  const handleGoToResult = useCallback(() => {
+    setStep(4)
+  }, [])
+
   const handleComplete = useCallback(() => {
+    if (!result) return
     onComplete({
       minimumPlayers:    Array.from(minimumUids),
       nonMinimumPlayers: Array.from(nonMinimumUids),
       absentPlayers:     absentMembers.map((m) => m.uid),
+      result,
     })
-  }, [minimumUids, nonMinimumUids, absentMembers, onComplete])
+  }, [minimumUids, nonMinimumUids, absentMembers, result, onComplete])
 
   const handleBack = useCallback(() => {
     setSearch('')
-    setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3)
+    setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3 | 4)
   }, [])
 
   // ── Helper lookups ─────────────────────────────────────────
@@ -305,8 +372,6 @@ export default function DualCascadeSelection({
 
   const minimumMembers    = Array.from(minimumUids).map((uid) => byUid[uid]).filter(Boolean)
   const nonMinimumMembers = Array.from(nonMinimumUids).map((uid) => byUid[uid]).filter(Boolean)
-
-  const selectedInView = currentPool.filter((m) => currentSelection.has(m.uid)).length
 
   // ── Render ─────────────────────────────────────────────────
   return (
@@ -383,14 +448,14 @@ export default function DualCascadeSelection({
             </button>
           </div>
 
-          {/* Member grid */}
-          <div className="glass-card p-4">
+          {/* Member grid — dense 2/4-column layout for 100-member alliances */}
+          <div className="glass-card p-3">
             {currentPool.length === 0 ? (
               <p className="text-center py-8 text-sm text-tactical-500">
                 {search ? 'No members match your search' : 'No members available'}
               </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
                 {currentPool.map((commander) => (
                   <MemberChip
                     key={commander.uid}
@@ -434,7 +499,7 @@ export default function DualCascadeSelection({
         </>
       )}
 
-      {/* ── STEP 3: SUMMARY ── */}
+      {/* ── STEP 3: SUMMARY (Commander Performance Track — no points) ── */}
       {step === 3 && (
         <>
           <div>
@@ -484,6 +549,64 @@ export default function DualCascadeSelection({
             />
           </div>
 
+          <p className="text-xs text-tactical-600 text-center -mt-1">
+            This classification is for participation monitoring only — it does not affect duel points.
+          </p>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-tactical-400 hover:border-white/20 hover:text-tactical-200 transition-colors"
+            >
+              ← Edit
+            </button>
+            <button
+              type="button"
+              onClick={handleGoToResult}
+              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 py-3 text-sm font-bold text-white transition-colors"
+            >
+              Next: Alliance Result →
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── STEP 4: ALLIANCE RESULT (Victory Track — the only source of points) ── */}
+      {step === 4 && (
+        <>
+          <div>
+            <h2 className="page-title">Today's Result</h2>
+            <p className="page-subtitle">
+              Select Victory or Defeat for the alliance. This is independent of minimum-score
+              performance and is the only thing that awards duel points.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <ResultChip
+              label="Victory"
+              icon="🏆"
+              selected={result === 'victory'}
+              variant="green"
+              onSelect={() => setResult('victory')}
+            />
+            <ResultChip
+              label="Defeat"
+              icon="💔"
+              selected={result === 'defeat'}
+              variant="red"
+              onSelect={() => setResult('defeat')}
+            />
+          </div>
+
+          {!result && (
+            <p className="text-xs text-amber-500 text-center">
+              ⚠ Select Victory or Defeat to finish locking this day
+            </p>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3">
             <button
@@ -496,7 +619,8 @@ export default function DualCascadeSelection({
             <button
               type="button"
               onClick={handleComplete}
-              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 py-3 text-sm font-bold text-white transition-colors"
+              disabled={!result}
+              className="flex-1 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed py-3 text-sm font-bold text-white transition-colors"
             >
               Confirm & Submit ✓
             </button>
