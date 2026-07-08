@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
   // "[id]" in the URL for Supreme and 404.
   { label: 'Verification',      href: '/verification',                 icon: '✅', roles: ['r4','r5','supreme'], divider: true },
   { label: 'Alliance Settings', href: '/alliance/[id]/settings',       icon: '⚙',  roles: ['r4','r5','supreme'] },
+  { label: 'Analytics',         href: '/alliance/[id]/analytics',      icon: '▤',  roles: ['r4','r5','supreme'] },
   // Audit Log is alliance-scoped for R4/R5 (the page itself filters by
   // target_alliance_id for non-Supreme roles) and shows everything for Supreme.
   { label: 'Audit Log',         href: '/audit',                        icon: '≡',  roles: ['r4','r5','supreme'], divider: true },

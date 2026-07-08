@@ -41,10 +41,13 @@ export default function BottomNav({ role, allianceId }: Props) {
   if (allianceId && ['r4', 'r5', 'supreme'].includes(role)) {
     menuItems.push(
       { label: 'Alliance Settings', href: `${allianceBase}/settings`, icon: '⚙️' },
+      { label: 'Analytics',         href: `${allianceBase}/analytics`, icon: '📊' },
     )
   }
 
-  if (role === 'supreme') {
+  // Audit Log is alliance-scoped for R4/R5 (the page filters by their own
+  // alliance) and shows everything for Supreme.
+  if (['r4', 'r5', 'supreme'].includes(role)) {
     menuItems.push(
       { label: 'Audit Log', href: '/audit', icon: '≡'  },
     )
