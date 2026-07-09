@@ -53,6 +53,16 @@ interface DualCascadeSelectionProps {
   members: Commander[]
   minimumScore: number
   onComplete: (result: DualResult) => void
+  /**
+   * Optional seed state — used by Bulk Screenshot Import to pre-classify
+   * commanders as "minimum score achieved" / "participated but below
+   * minimum" before the leadership review step. Read once on mount only
+   * (see useState initializers below); the parent must remount this
+   * component (e.g. via a changing `key` prop) to apply a fresh import
+   * after the component is already mounted.
+   */
+  initialMinimumUids?: string[]
+  initialNonMinimumUids?: string[]
 }
 
 // ── Constants ─────────────────────────────────────────────────
@@ -273,6 +283,8 @@ export default function DualCascadeSelection({
   members,
   minimumScore,
   onComplete,
+  initialMinimumUids,
+  initialNonMinimumUids,
 }: DualCascadeSelectionProps) {
   // Fixed alphabetical order — this NEVER changes, regardless of selection.
   // Both "Selected" and "Remaining" sections are filtered views of this
@@ -284,8 +296,15 @@ export default function DualCascadeSelection({
 
   // ── State ──────────────────────────────────────────────────
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
-  const [minimumUids, setMinimumUids] = useState<Set<string>>(new Set())
-  const [nonMinimumUids, setNonMinimumUids] = useState<Set<string>>(new Set())
+  // Lazy initializers so a Bulk Import seed only applies once, on mount —
+  // the parent forces a fresh mount (changing `key`) whenever new import
+  // results should be applied.
+  const [minimumUids, setMinimumUids] = useState<Set<string>>(
+    () => new Set(initialMinimumUids ?? [])
+  )
+  const [nonMinimumUids, setNonMinimumUids] = useState<Set<string>>(
+    () => new Set(initialNonMinimumUids ?? [])
+  )
   const [search, setSearch] = useState('')
   const [result, setResult] = useState<DuelResult | null>(null)
 

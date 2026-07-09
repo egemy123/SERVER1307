@@ -71,6 +71,13 @@ export default function DuelEntryPage() {
   const [detailedResult, setDetailedResult] = useState<DuelResult | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
 
+  // Simple Mode — Bulk Import seeds DualCascadeSelection's chip state via
+  // these, then cascadeKey is bumped to force a remount so the seed applies
+  // (the component only reads its initial props once, on mount).
+  const [importedMinimumUids,    setImportedMinimumUids]    = useState<string[]>([])
+  const [importedNonMinimumUids, setImportedNonMinimumUids] = useState<string[]>([])
+  const [cascadeKey, setCascadeKey] = useState(0)
+
   // Only auto-jump to the next open day once, on first load — after that,
   // the user's own tab clicks are respected even across refetches.
   const hasAutoAdvancedRef = useRef(false)
@@ -486,10 +493,36 @@ export default function DuelEntryPage() {
               )}
             </div>
 
-            {/* Cascade selection — members mapped to DualCascadeSelection's shape */}
+            {/* Bulk Import — OCR-reads screenshots, then auto-sorts each
+                matched commander into "Selected" (Step 1) or "Non-Minimum"
+                (Step 2) below by comparing their score against the minimum
+                above. Anyone scoring exactly 0, or not matched, is left
+                unclassified and falls through to Absent — same as if you
+                never tapped them. Does NOT save anything or touch
+                Victory/Defeat; review the chips below before confirming. */}
+            <button
+              type="button"
+              onClick={() => setShowBulkImport(true)}
+              disabled={!minScoreNum}
+              className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-accent/40 bg-accent-light/40 py-3 text-sm font-semibold text-accent-deep hover:bg-accent-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              📷 Bulk Import Screenshots
+            </button>
+            {!minScoreNum && (
+              <p className="text-xs text-amber-600 -mt-3">
+                ⚠ Set the minimum score above first so Bulk Import can classify pass/fail
+              </p>
+            )}
+
+            {/* Cascade selection — members mapped to DualCascadeSelection's shape.
+                key={cascadeKey} forces a remount whenever a Bulk Import completes,
+                so the freshly-imported initial* props are picked up. */}
             <DualCascadeSelection
+              key={cascadeKey}
               members={cascadeMembers}
               minimumScore={minScoreNum}
+              initialMinimumUids={importedMinimumUids}
+              initialNonMinimumUids={importedNonMinimumUids}
               onComplete={handleCascadeComplete}
             />
 
@@ -677,9 +710,32 @@ export default function DuelEntryPage() {
           roster={members.map(m => ({ uid: m.uid, name: m.name }))}
           onClose={() => setShowBulkImport(false)}
           onImport={(scores) => {
-            setDetailedScores(prev => ({ ...prev, ...scores }))
-            setShowBulkImport(false)
-            setMsg(`Imported ${Object.keys(scores).length} score(s) from screenshots — review below before locking`)
+            if (duelWeek?.mode === 'quick') {
+              // Simple Mode: classify each matched commander as
+              // minimum-achieved / below-minimum by comparing their OCR'd
+              // score against minScoreNum, then seed DualCascadeSelection's
+              // chip state via a forced remount. A score of exactly 0 (or a
+              // commander the OCR didn't detect at all) is left out of both
+              // sets on purpose — they fall through to "Remaining" and are
+              // counted as Absent, same as if you'd never tapped them.
+              const minUids: string[] = []
+              const nonMinUids: string[] = []
+              for (const [uid, rawScore] of Object.entries(scores)) {
+                const score = parseInt(rawScore) || 0
+                if (score === 0) continue
+                if (minScoreNum && score < minScoreNum) nonMinUids.push(uid)
+                else minUids.push(uid)
+              }
+              setImportedMinimumUids(minUids)
+              setImportedNonMinimumUids(nonMinUids)
+              setCascadeKey(k => k + 1)
+              setShowBulkImport(false)
+              setMsg(`Imported ${minUids.length + nonMinUids.length} commander(s) from screenshots — review selections below before confirming`)
+            } else {
+              setDetailedScores(prev => ({ ...prev, ...scores }))
+              setShowBulkImport(false)
+              setMsg(`Imported ${Object.keys(scores).length} score(s) from screenshots — review below before locking`)
+            }
           }}
         />
       )}
