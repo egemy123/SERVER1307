@@ -13,11 +13,12 @@
 // Victory/Defeat is the ONLY source of duel points, decided manually
 // by leadership every time a day is locked.
 
-import { useState, useEffect, useMemo }       from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter }               from 'next/navigation'
 import { DUEL_DAY_NAMES, DUEL_POINT_VALUES }  from '@/lib/types'
 import type { DuelDay, DuelResult }           from '@/lib/types'
 import DualCascadeSelection                   from '@/components/duel/DualCascadeSelection'
+import BulkImportPanel                        from '@/components/duel/BulkImportPanel'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,11 @@ export default function DuelEntryPage() {
   const [detailedScores, setDetailedScores] = useState<Record<string, string>>({})
   const [detailedStep,   setDetailedStep]   = useState<'scores' | 'result'>('scores')
   const [detailedResult, setDetailedResult] = useState<DuelResult | null>(null)
+  const [showBulkImport, setShowBulkImport] = useState(false)
+
+  // Only auto-jump to the next open day once, on first load — after that,
+  // the user's own tab clicks are respected even across refetches.
+  const hasAutoAdvancedRef = useRef(false)
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -78,11 +84,22 @@ export default function DuelEntryPage() {
     try {
       const res  = await fetch(`/api/duel/week?alliance_id=${allianceId}`)
       const data = await res.json()
+      const loadedEntries: DuelEntry[] = data.entries ?? []
       setMembers(data.members ?? [])
       setDuelWeek(data.week ?? null)
-      setEntries(data.entries ?? [])
+      setEntries(loadedEntries)
       setDayResults(data.day_results ?? [])
       if (!data.week) setShowModeSelect(true)
+
+      // Auto-advance to the first day that isn't locked yet — so opening
+      // "Enter Scores" doesn't strand you on Monday once it's done.
+      if (!hasAutoAdvancedRef.current) {
+        const firstOpenDay = DAYS.find(
+          (day) => !loadedEntries.some((e) => e.day === day && e.day_locked)
+        )
+        if (firstOpenDay) setActiveDay(firstOpenDay)
+        hasAutoAdvancedRef.current = true
+      }
     } catch {
       setMsg('Failed to load data')
     } finally {
@@ -342,16 +359,18 @@ export default function DuelEntryPage() {
         </div>
       )}
 
-      {/* Day selector tabs — Day 1-6 fixed weekly cycle */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      {/* Day selector tabs — Day 1-6 fixed weekly cycle.
+          Mobile: 3-col grid so all 6 days are visible with no hidden
+          horizontal scroll. Desktop: single scrollable row. */}
+      <div className="grid grid-cols-3 gap-1.5 sm:flex sm:gap-1 sm:overflow-x-auto sm:pb-1">
         {DAYS.map((day, i) => {
           const { locked, passed, absent, result } = getDayStats(day)
           return (
             <button
               key={day}
               onClick={() => { setActiveDay(day); setMsg(''); setDetailedStep('scores') }}
-              className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-medium
-                         whitespace-nowrap transition-all shrink-0 border
+              className={`flex flex-col items-center px-2 py-2 rounded-xl text-xs font-medium
+                         whitespace-nowrap sm:shrink-0 border
                          ${activeDay === day
                            ? 'bg-accent text-white border-accent'
                            : locked
@@ -489,6 +508,16 @@ export default function DuelEntryPage() {
 
             {detailedStep === 'scores' && (
               <>
+                {/* Bulk Import — auto-fills the score grid below via OCR/AI.
+                    Does NOT save anything; Alliance Result still required after. */}
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImport(true)}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-accent/40 bg-accent-light/40 py-3 text-sm font-semibold text-accent-deep hover:bg-accent-light transition-colors"
+                >
+                  📷 Bulk Import Screenshots
+                </button>
+
                 {/* Minimum score input */}
                 <div>
                   <label className="text-xs font-medium text-tactical-600 block mb-1.5">
@@ -641,6 +670,20 @@ export default function DuelEntryPage() {
         )}
 
       </div>
+
+      {showBulkImport && (
+        <BulkImportPanel
+          allianceId={allianceId}
+          roster={members.map(m => ({ uid: m.uid, name: m.name }))}
+          onClose={() => setShowBulkImport(false)}
+          onImport={(scores) => {
+            setDetailedScores(prev => ({ ...prev, ...scores }))
+            setShowBulkImport(false)
+            setMsg(`Imported ${Object.keys(scores).length} score(s) from screenshots — review below before locking`)
+          }}
+        />
+      )}
+
     </div>
   )
 }
