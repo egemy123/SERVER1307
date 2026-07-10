@@ -37,7 +37,7 @@ export async function GET(req: Request) {
       dayResults = resultData ?? []
     }
 
-    return NextResponse.json({ week, members, entries, day_results: dayResults })
+    return NextResponse.json({ week, members, entries, day_results: dayResults, viewer_role: auth.role })
   } catch (err) {
     console.error('[DUEL WEEK GET]', err)
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })

@@ -19,13 +19,14 @@ import { DUEL_DAY_NAMES, DUEL_POINT_VALUES }  from '@/lib/types'
 import type { DuelDay, DuelResult }           from '@/lib/types'
 import DualCascadeSelection                   from '@/components/duel/DualCascadeSelection'
 import BulkImportPanel                        from '@/components/duel/BulkImportPanel'
+import MinimumScoreSelector                   from '@/components/duel/MinimumScoreSelector'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 const DAYS: DuelDay[] = ['monday','tuesday','wednesday','thursday','friday','saturday']
 
 interface Commander { uid: string; name: string; role: 'r1'|'r2'|'r3'|'r4'|'r5' }
-interface DuelWeek  { id: string; mode: string; minimum_score: number | null; week_key: string }
+interface DuelWeek  { id: string; mode: string; minimum_score: number | null; week_key: string; draft_minimum_scores?: Record<string, number> }
 interface DuelEntry {
   commander_uid: string
   day: DuelDay
@@ -70,13 +71,14 @@ export default function DuelEntryPage() {
   const [detailedStep,   setDetailedStep]   = useState<'scores' | 'result'>('scores')
   const [detailedResult, setDetailedResult] = useState<DuelResult | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
+  const [viewerRole,     setViewerRole]     = useState<string>('')
 
-  // Simple Mode — Bulk Import seeds DualCascadeSelection's chip state via
-  // these, then cascadeKey is bumped to force a remount so the seed applies
-  // (the component only reads its initial props once, on mount).
-  const [importedMinimumUids,    setImportedMinimumUids]    = useState<string[]>([])
-  const [importedNonMinimumUids, setImportedNonMinimumUids] = useState<string[]>([])
+  // Simple Mode Bulk Import seeding — DualCascadeSelection only reads its
+  // initial* props once on mount, so we force a remount (key bump) whenever
+  // an import completes, seeded with the OCR-derived pass/fail split.
   const [cascadeKey, setCascadeKey] = useState(0)
+  const [importedMinimumUids, setImportedMinimumUids]       = useState<string[]>([])
+  const [importedNonMinimumUids, setImportedNonMinimumUids] = useState<string[]>([])
 
   // Only auto-jump to the next open day once, on first load — after that,
   // the user's own tab clicks are respected even across refetches.
@@ -96,6 +98,7 @@ export default function DuelEntryPage() {
       setDuelWeek(data.week ?? null)
       setEntries(loadedEntries)
       setDayResults(data.day_results ?? [])
+      setViewerRole(data.viewer_role ?? '')
       if (!data.week) setShowModeSelect(true)
 
       // Auto-advance to the first day that isn't locked yet — so opening
@@ -147,7 +150,8 @@ export default function DuelEntryPage() {
     [members]
   )
 
-  const minScoreNum = minScore ? parseInt(minScore) : (duelWeek?.minimum_score ?? 0)
+  const draftMinForActiveDay = duelWeek?.draft_minimum_scores?.[activeDay] ?? null
+  const minScoreNum = minScore ? parseInt(minScore) : (draftMinForActiveDay ?? duelWeek?.minimum_score ?? 0)
 
   // Live preview of Detailed Mode status derived from entered scores
   const detailedPreview = useMemo(() => {
@@ -467,39 +471,9 @@ export default function DuelEntryPage() {
         {!isDayLocked && duelWeek?.mode === 'quick' && (
           <div className="flex flex-col gap-5">
 
-            {/* Minimum score input */}
-            <div>
-              <label className="text-xs font-medium text-tactical-600 block mb-1.5">
-                Minimum required score for {DUEL_DAY_NAMES[activeDay]}
-              </label>
-              <div className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  value={minScore}
-                  onChange={e => setMinScore(e.target.value)}
-                  placeholder="e.g. 20000000"
-                  className="input-base font-mono flex-1"
-                />
-                {minScore && (
-                  <span className="badge badge-active font-mono shrink-0">
-                    {(parseInt(minScore) / 1_000_000).toFixed(0)}M
-                  </span>
-                )}
-              </div>
-              {!minScore && (
-                <p className="text-xs text-amber-600 mt-1">
-                  ⚠ Set minimum score before locking the day
-                </p>
-              )}
-            </div>
-
-            {/* Bulk Import — OCR-reads screenshots, then auto-sorts each
-                matched commander into "Selected" (Step 1) or "Non-Minimum"
-                (Step 2) below by comparing their score against the minimum
-                above. Anyone scoring exactly 0, or not matched, is left
-                unclassified and falls through to Absent — same as if you
-                never tapped them. Does NOT save anything or touch
-                Victory/Defeat; review the chips below before confirming. */}
+            {/* Bulk Import — auto-classifies pass/fail via OCR against the
+                minimum score below. Does NOT save anything; you still
+                review chips and confirm Victory/Defeat after. */}
             <button
               type="button"
               onClick={() => setShowBulkImport(true)}
@@ -510,20 +484,27 @@ export default function DuelEntryPage() {
             </button>
             {!minScoreNum && (
               <p className="text-xs text-amber-600 -mt-3">
-                ⚠ Set the minimum score above first so Bulk Import can classify pass/fail
+                ⚠ Set the minimum score first — Bulk Import needs it to sort pass/fail
               </p>
             )}
 
-            {/* Cascade selection — members mapped to DualCascadeSelection's shape.
-                key={cascadeKey} forces a remount whenever a Bulk Import completes,
-                so the freshly-imported initial* props are picked up. */}
+            {/* Minimum score selector — presets, permissions, live persistence */}
+            <MinimumScoreSelector
+              role={viewerRole}
+              duelWeekId={duelWeek.id}
+              day={activeDay}
+              initialValue={draftMinForActiveDay ?? duelWeek?.minimum_score ?? null}
+              onChange={(num) => setMinScore(String(num))}
+            />
+
+            {/* Cascade selection — members mapped to DualCascadeSelection's shape */}
             <DualCascadeSelection
               key={cascadeKey}
               members={cascadeMembers}
               minimumScore={minScoreNum}
+              onComplete={handleCascadeComplete}
               initialMinimumUids={importedMinimumUids}
               initialNonMinimumUids={importedNonMinimumUids}
-              onComplete={handleCascadeComplete}
             />
 
             {/* Saving overlay */}
@@ -551,31 +532,14 @@ export default function DuelEntryPage() {
                   📷 Bulk Import Screenshots
                 </button>
 
-                {/* Minimum score input */}
-                <div>
-                  <label className="text-xs font-medium text-tactical-600 block mb-1.5">
-                    Minimum required score for {DUEL_DAY_NAMES[activeDay]}
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="number"
-                      value={minScore}
-                      onChange={e => setMinScore(e.target.value)}
-                      placeholder="e.g. 20000000"
-                      className="input-base font-mono flex-1"
-                    />
-                    {minScore && (
-                      <span className="badge badge-active font-mono shrink-0">
-                        {(parseInt(minScore) / 1_000_000).toFixed(0)}M
-                      </span>
-                    )}
-                  </div>
-                  {!minScore && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      ⚠ Set minimum score before entering results
-                    </p>
-                  )}
-                </div>
+                {/* Minimum score selector — presets, permissions, live persistence */}
+                <MinimumScoreSelector
+                  role={viewerRole}
+                  duelWeekId={duelWeek.id}
+                  day={activeDay}
+                  initialValue={draftMinForActiveDay ?? duelWeek?.minimum_score ?? null}
+                  onChange={(num) => setMinScore(String(num))}
+                />
 
                 {/* Live preview counter */}
                 <div className="grid grid-cols-4 gap-2">
@@ -711,27 +675,25 @@ export default function DuelEntryPage() {
           onClose={() => setShowBulkImport(false)}
           onImport={(scores) => {
             if (duelWeek?.mode === 'quick') {
-              // Simple Mode: classify each matched commander as
-              // minimum-achieved / below-minimum by comparing their OCR'd
-              // score against minScoreNum, then seed DualCascadeSelection's
-              // chip state via a forced remount. A score of exactly 0 (or a
-              // commander the OCR didn't detect at all) is left out of both
-              // sets on purpose — they fall through to "Remaining" and are
-              // counted as Absent, same as if you'd never tapped them.
+              // Simple Mode: classify each OCR'd score against the
+              // minimum, then seed the cascade's Step 1/Step 2 selections.
+              // Anyone at 0, unmatched, or missing stays out of both sets —
+              // same as never tapping them — so they still land in Absent.
               const minUids: string[] = []
-              const nonMinUids: string[] = []
-              for (const [uid, rawScore] of Object.entries(scores)) {
-                const score = parseInt(rawScore) || 0
-                if (score === 0) continue
-                if (minScoreNum && score < minScoreNum) nonMinUids.push(uid)
-                else minUids.push(uid)
+              const belowUids: string[] = []
+              for (const [uid, scoreStr] of Object.entries(scores)) {
+                const score = parseInt(scoreStr)
+                if (!score || score <= 0) continue
+                if (score >= minScoreNum) minUids.push(uid)
+                else belowUids.push(uid)
               }
               setImportedMinimumUids(minUids)
-              setImportedNonMinimumUids(nonMinUids)
-              setCascadeKey(k => k + 1)
+              setImportedNonMinimumUids(belowUids)
+              setCascadeKey(k => k + 1) // remount cascade so it re-reads initial* props
               setShowBulkImport(false)
-              setMsg(`Imported ${minUids.length + nonMinUids.length} commander(s) from screenshots — review selections below before confirming`)
+              setMsg(`Imported ${minUids.length + belowUids.length} commander(s) from screenshots — review chips below before continuing`)
             } else {
+              // Detailed Mode: unchanged — fills the raw score grid.
               setDetailedScores(prev => ({ ...prev, ...scores }))
               setShowBulkImport(false)
               setMsg(`Imported ${Object.keys(scores).length} score(s) from screenshots — review below before locking`)
