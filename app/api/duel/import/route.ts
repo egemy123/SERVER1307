@@ -12,7 +12,8 @@
 // Detailed Mode -> Alliance Result -> lock-day flow, so Victory/Defeat
 // stays a manual decision every time, same as every other entry path.
 //
-// Requires GEMINI_API_KEY in the environment (see lib/duel-import/extract.ts).
+// Requires at least one GEMINI_API_KEY_1 (and optionally _2, _3, ...) in the
+// environment (see lib/duel-import/extract.ts and keyManager.ts).
 
 import { requireAuth }       from '@/lib/firebase/serverAuth'
 import { createAdminClient } from '@/lib/supabase/admin'
