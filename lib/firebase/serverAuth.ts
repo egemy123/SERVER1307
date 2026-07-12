@@ -17,11 +17,9 @@ export type AuthContext = FirebaseDecodedClaims
 /**
  * Live commander lookup — mirrors middleware.ts's fetchLiveCommander.
  * role/alliance_id/name must NEVER be trusted from the session cookie's
- * custom claims, because those claims are frozen at whatever moment the
- * ID token used to mint the cookie was issued — they do not reflect a
- * role change, alliance move, or verification that happened afterward.
- * The cookie is only trustworthy for one thing: commander_uid, which is
- * verified by Firebase and never changes after registration.
+ * custom claims — those are frozen at whatever moment the ID token used to
+ * mint the cookie was issued, and don't reflect a later role/alliance
+ * change. Only commander_uid is trustworthy from the cookie itself.
  */
 async function fetchLiveCommander(commanderUid: string) {
   const supabase = createAdminClient()
@@ -66,14 +64,6 @@ async function fetchLiveCommander(commanderUid: string) {
 /**
  * Verify Firebase session cookie — call at top of EVERY server action
  * Returns null if session is invalid, expired, or missing.
- *
- * Identity (commander_uid) comes from the verified cookie. Everything
- * that can change after login — role, alliance_id, alliance_tag, name —
- * is looked up live from Supabase, same as middleware.ts does. This is
- * what keeps API routes and page rendering in agreement; before this
- * fix, a page could render as fully authorized (middleware's live
- * lookup) while the same request's POST 401'd (this function's stale
- * cookie claims) whenever the cookie predated a claims/role update.
  */
 export async function requireAuth(): Promise<AuthContext | null> {
   const cookieStore   = await cookies()
@@ -95,15 +85,11 @@ export async function requireAuth(): Promise<AuthContext | null> {
 
   const live = await fetchLiveCommander(decoded.commander_uid)
   if (!live) {
-    console.error('[requireAuth] fetchLiveCommander returned null — no matching/active commander row', {
-      commanderUid: decoded.commander_uid,
-    })
+    console.error('[requireAuth] fetchLiveCommander returned null', { commanderUid: decoded.commander_uid })
     return null
   }
   if (!live.role) {
-    console.error('[requireAuth] commander row found but role is null/empty', {
-      commanderUid: decoded.commander_uid,
-    })
+    console.error('[requireAuth] commander row found but role is null/empty', { commanderUid: decoded.commander_uid })
     return null
   }
 

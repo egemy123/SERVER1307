@@ -20,7 +20,7 @@ interface AllianceAlertWidgetProps {
 }
 
 export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetProps) {
-  const { status, loading, refetch } = useAlertStatus(allianceId)
+  const { status, loading, error, refetch } = useAlertStatus(allianceId)
   const [open, setOpen] = useState(false)
 
   const [selected, setSelected]           = useState<AlertPresetKey | null>(null)
@@ -111,17 +111,20 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
             <p className="text-xs text-tactical-500 truncate">
               {loading
                 ? 'Loading…'
-                : ready
-                  ? `Ready · ${status?.recipients ?? 0} members`
-                  : <>Cooldown <CooldownTimer secondsRemaining={status?.secondsRemaining ?? 0} className="tabular-nums" /></>}
+                : error
+                  ? <span className="text-red-500">{error}</span>
+                  : ready
+                    ? `Ready · ${status?.recipients ?? 0} members`
+                    : <>Cooldown <CooldownTimer secondsRemaining={status?.secondsRemaining ?? 0} className="tabular-nums" /></>}
             </p>
           </div>
         </div>
         <button
           type="button"
+          disabled={!!error}
           onClick={() => setOpen(true)}
           className="px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent-mid
-                     active:scale-[0.97] transition-all shrink-0"
+                     active:scale-[0.97] transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Send Alert
         </button>
