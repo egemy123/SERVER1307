@@ -159,52 +159,11 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Row — Current Week and Alliance Status removed (week now
-          lives in the clock bar above; alliance status wasn't needed).
-          Remaining two cards are smaller than before. */}
-      <div className="grid grid-cols-2 gap-3 max-w-sm">
-
-        <div className="stat-card !p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-tactical-500 font-medium">
-              Active Members
-            </span>
-            <span className="text-tactical-300 text-base">👥</span>
-          </div>
-          <p className="text-lg font-semibold text-tactical-900 mt-1">
-            {activeCount}
-          </p>
-        </div>
-
-        <div
-          className={`stat-card !p-3 ${
-            inactiveCount > 0
-              ? 'border border-amber-300 bg-amber-50/40'
-              : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-tactical-500 font-medium">
-              Inactive Flags
-            </span>
-            <span
-              className={`text-base ${
-                inactiveCount > 0 ? 'text-amber-400' : 'text-tactical-300'
-              }`}
-            >
-              ⚠
-            </span>
-          </div>
-          <p
-            className={`text-lg font-semibold mt-1 ${
-              inactiveCount > 0 ? 'text-amber-700' : 'text-tactical-900'
-            }`}
-          >
-            {inactiveCount}
-          </p>
-        </div>
-
-      </div>
+      {/* Alliance Alert — replaces the old Active Members / Inactive Flags
+          stat row. activeCount/inactiveCount are still computed above and
+          still used by the flagged-commanders banner below and by
+          AllianceOverviewCard, so nothing else needed to change. */}
+      {allianceId && <AllianceAlertWidget allianceId={allianceId} />}
 
       {/* Inactive alert */}
       {isR4Plus && inactiveCount > 0 && (
@@ -248,9 +207,6 @@ export default async function DashboardPage() {
 
         </div>
       )}
-
-      {/* Alliance Alert */}
-      {allianceId && <AllianceAlertWidget allianceId={allianceId} />}
 
       {/* Recent Activity */}
       <div className="glass-card p-5">
