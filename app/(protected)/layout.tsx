@@ -4,6 +4,7 @@ import { redirect }  from 'next/navigation'
 import Sidebar          from '@/components/layout/Sidebar'
 import BottomNav        from '@/components/layout/BottomNav'
 import RoleSyncProvider from '@/components/providers/RoleSyncProvider'
+import FCMProvider      from '@/components/providers/FCMProvider'
 import type { Role }  from '@/lib/types'
 
 export default async function ProtectedLayout({
@@ -42,7 +43,9 @@ export default async function ProtectedLayout({
             currentRole={role}
             currentAllianceId={allianceId}
           >
-            {children}
+            <FCMProvider commanderId={commanderUid}>
+              {children}
+            </FCMProvider>
           </RoleSyncProvider>
         </div>
       </main>

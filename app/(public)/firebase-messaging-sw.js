@@ -1,140 +1,64 @@
 // public/firebase-messaging-sw.js
-// ACC #7C — Firebase Cloud Messaging Service Worker
-// Must be at the root so it can intercept all push events
+//
+// Required by hooks/useFCM.ts — navigator.serviceWorker.register('/firebase-messaging-sw.js')
+// will 404 without this file, which silently breaks token registration
+// (getToken() fails, saveToken() never runs, and "Delivered to 0 Members"
+// happens even for users who granted notification permission).
+//
+// This file is served as a static asset — Next.js does NOT substitute
+// process.env values into it at build time. The values below are your
+// Firebase Web SDK config (apiKey, authDomain, etc.) — these are public,
+// client-exposed values by design (the same ones already baked into your
+// browser bundle via NEXT_PUBLIC_* vars), not secrets, so hardcoding them
+// here is standard practice for Firebase Cloud Messaging service workers.
+//
+// Fill in the same values you already have in lib/firebase/client.ts / your
+// NEXT_PUBLIC_FIREBASE_* env vars.
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
-// ---------------------------------------------------------------------------
-// Firebase config (duplicated here — service workers can't import env vars)
-// Replace these with your actual values; they are NOT secret (public config)
-// ---------------------------------------------------------------------------
 firebase.initializeApp({
-  apiKey: "AIzaSyDEYihGnPnK9x4YL54sIWehY-Qu97-A_U8",
-  authDomain: "acc-platform-65402.firebaseapp.com",
-  projectId: "acc-platform-65402",
-  storageBucket: "acc-platform-65402.firebasestorage.app",
-  messagingSenderId: "780477334406",
-  appId: "1:780477334406:web:46301241acfe0119192207",
-  measurementId: "G-CHTY9VW6TV"
-})
+  apiKey:            'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_API_KEY',
+  authDomain:        'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+  projectId:         'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+  messagingSenderId: 'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+  appId:             'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_APP_ID',
+});
 
 const messaging = firebase.messaging();
 
-// ---------------------------------------------------------------------------
-// Background message handler
-// Fires when the app is closed or in the background
-// ---------------------------------------------------------------------------
+// Background handler — fires when the app/tab is NOT in focus. Foreground
+// notifications (tab open and active) are handled instead by onMessage()
+// inside hooks/useFCM.ts; this is specifically the closed/backgrounded case.
 messaging.onBackgroundMessage((payload) => {
-  console.log('[SW] Background message received:', payload);
+  const title = payload.notification?.title ?? 'ACC Alert';
+  const body  = payload.notification?.body ?? '';
+  const url   = payload.data?.url ?? '/';
 
-  const { title, body, icon, badge, data } = payload.notification ?? {};
-  const notifData = payload.data ?? {};
-
-  // Build a rich notification
-  const notificationTitle = title ?? 'ACC Command Center';
-  const notificationOptions = {
-    body:    body    ?? 'You have a new update.',
-    icon:    icon    ?? '/icons/icon-192x192.png',
-    badge:   badge   ?? '/icons/badge-72x72.png',
-    tag:     notifData.tag ?? 'acc-default',         // collapses duplicate notifs
-    renotify: false,
-    data:    {
-      url:  notifData.url  ?? '/',
-      type: notifData.type ?? 'general',
-      ...notifData,
-    },
-    actions: buildActions(notifData.type),
-  };
-
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  self.registration.showNotification(title, {
+    body,
+    icon: '/next.svg', // swap for a real app icon if you have one
+    data: { url },
+    tag:  payload.data?.tag ?? undefined,
+  });
 });
 
-// ---------------------------------------------------------------------------
-// Notification click handler
-// ---------------------------------------------------------------------------
+// Tapping the notification opens (or focuses) the ACC tab at the target URL.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-
-  const data   = event.notification.data ?? {};
-  const action = event.action;
-  const url    = resolveUrl(data, action);
+  const targetUrl = event.notification.data?.url ?? '/';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If the app is already open, focus and navigate
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.focus();
-          client.postMessage({ type: 'NAVIGATE', url });
-          return;
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
         }
       }
-      // Otherwise open a new window
       if (clients.openWindow) {
-        return clients.openWindow(url);
+        return clients.openWindow(targetUrl);
       }
     })
   );
 });
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build action buttons based on notification type
- */
-function buildActions(type) {
-  switch (type) {
-    case 'transfer_request':
-      return [
-        { action: 'approve', title: '✅ Approve' },
-        { action: 'view',    title: '👁 View'    },
-      ];
-    case 'inactive_flag':
-      return [
-        { action: 'view', title: '👁 View Member' },
-      ];
-    case 'event_update':
-      return [
-        { action: 'view', title: '📋 View Event' },
-      ];
-    default:
-      return [];
-  }
-}
-
-/**
- * Resolve the URL to navigate to based on notification type and action
- */
-function resolveUrl(data, action) {
-  const base = self.location.origin;
-
-  if (action === 'approve' && data.transferId) {
-    return `${base}/alliance/${data.allianceId}/transfers/${data.transferId}?action=approve`;
-  }
-
-  switch (data.type) {
-    case 'inactive_flag':
-      return data.allianceId
-        ? `${base}/alliance/${data.allianceId}/members?filter=inactive`
-        : `${base}/dashboard`;
-    case 'transfer_request':
-      return data.transferId
-        ? `${base}/alliance/${data.allianceId}/transfers/${data.transferId}`
-        : `${base}/alliance/${data.allianceId}/transfers`;
-    case 'event_update':
-      return data.eventId
-        ? `${base}/alliance/${data.allianceId}/events/${data.eventId}`
-        : `${base}/alliance/${data.allianceId}/events`;
-    default:
-      return data.url ?? `${base}/dashboard`;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Service worker lifecycle — skip waiting so updates apply immediately
-// ---------------------------------------------------------------------------
-self.addEventListener('install',  () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
