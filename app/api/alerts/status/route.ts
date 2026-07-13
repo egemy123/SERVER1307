@@ -22,11 +22,15 @@ export async function GET(req: NextRequest) {
 
     const supabase = createAdminClient()
 
-    const [{ data: alliance }, { count: recipients }, { data: cooldown, error: cooldownError }] = await Promise.all([
+    const [{ data: alliance }, { data: rosterTokens }, { data: cooldown, error: cooldownError }] = await Promise.all([
       supabase.from('alliances').select('tag, name').eq('id', allianceId).single(),
+      // Fetching actual token arrays (not a head:true count) so we can count
+      // members who can ACTUALLY receive a push — total active roster size
+      // (e.g. "100 members") overstates reach for anyone who hasn't gone
+      // through the notification-permission + token-registration flow yet.
       supabase
         .from('commanders')
-        .select('uid', { count: 'exact', head: true })
+        .select('fcm_tokens')
         .eq('alliance_id', allianceId)
         .eq('status', 'active'),
       supabase.rpc('get_alliance_alert_status', {
@@ -41,12 +45,15 @@ export async function GET(req: NextRequest) {
     }
 
     const row = Array.isArray(cooldown) ? cooldown[0] : cooldown
+    const recipients = (rosterTokens ?? []).filter(
+      (r: { fcm_tokens: string[] | null }) => (r.fcm_tokens?.length ?? 0) > 0,
+    ).length
 
     return NextResponse.json({
       allianceTag:  alliance?.tag ?? null,
       allianceName: alliance?.name ?? null,
       role:         auth.role,
-      recipients:   recipients ?? 0,
+      recipients,
       ready:        row?.ready ?? true,
       secondsRemaining: row?.seconds_remaining ?? 0,
     })
