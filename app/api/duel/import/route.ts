@@ -3,7 +3,7 @@
 // Bulk Dual Screenshot Import — streaming endpoint.
 // Accepts up to 50 base64-encoded screenshots, runs them through OCR/AI
 // extraction with limited concurrency, fuzzy-matches every detected name
-// against the alliance roster, resolves duplicates/rank conflicts, and
+// against the alliance roster, resolves duplicates, and
 // streams NDJSON progress events back to the client so the UI can show
 // live "Processing image X of Y" without freezing.
 //
@@ -19,7 +19,7 @@ import { requireAuth }       from '@/lib/firebase/serverAuth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractRowsFromImages } from '@/lib/duel-import/extract'
 import { matchExtractedRows }     from '@/lib/duel-import/commanderMatch'
-import { resolveDuplicatesAndRanks } from '@/lib/duel-import/dedupe'
+import { resolveDuplicates } from '@/lib/duel-import/dedupe'
 import { IMPORT_LIMITS, type ImportProgressEvent, type ImportSummary } from '@/lib/duel-import/types'
 
 export const runtime = 'nodejs'
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
         )
 
         const matched = matchExtractedRows(rawRows, roster ?? [])
-        const { rows, duplicates } = resolveDuplicatesAndRanks(matched)
+        const { rows, duplicates } = resolveDuplicates(matched)
 
         const summary: ImportSummary = {
           imagesUploaded:      imagesWithIds.length,

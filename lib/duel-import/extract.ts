@@ -1,6 +1,6 @@
 // lib/duel-import/extract.ts
-// SERVER-ONLY. Calls Google's Gemini vision API to read rank/name/score
-// triplets off a Last War Dual leaderboard screenshot.
+// SERVER-ONLY. Calls Google's Gemini vision API to read commander
+// name/score pairs off a Last War Dual leaderboard screenshot.
 //
 // Resilience: round-robins across every configured GEMINI_API_KEY_* (see
 // keyManager.ts). On a transient error (429 rate limit, 503 overloaded, or
@@ -25,15 +25,18 @@ const MAX_BACKOFF_MS = 8000
 
 const EXTRACTION_SYSTEM_PROMPT = `You read Last War: Survival "Dual" leaderboard screenshots and extract every row as structured data.
 
-Each row has three fields, left to right: Rank (integer), Commander Name, Dual Score (integer, may contain commas/periods as thousands separators).
+Each row has two fields you need: Commander Name and Dual Score (integer, may contain commas/periods as thousands separators). Ignore any rank/position number shown on the row — it is not needed and must not be included in your output.
+
+CRITICAL — Alliance tags:
+Some rows may show an alliance tag or prefix immediately before the commander's own name — typically in brackets, e.g. "[IMC] Roy", "【7C】Xòm", "(GMG) Serfe". This tag identifies the alliance, not the commander. EXCLUDE it entirely from the name field — return ONLY the commander's own name, with no leading bracket, tag, or alliance identifier of any kind. "[IMC] Roy" must be returned as "Roy", not "[IMC] Roy" and not "IMC Roy".
 
 CRITICAL — Unicode preservation:
-Commander names frequently use stylized Unicode: diacritics (Š, Ø, Ò, etc.), decorative bracket glyphs (『』, ꧁꧂, 【】), and other symbols. Transcribe names EXACTLY as shown, character for character. Do not simplify, translate, or convert to plain ASCII. Do not strip decorative brackets.
+Once the alliance tag (if any) is stripped, commander names frequently use stylized Unicode: diacritics (Š, Ø, Ò, etc.), decorative bracket glyphs (『』, ꧁꧂, 【】) THAT ARE PART OF THE NAME ITSELF (not an alliance tag), and other symbols. Transcribe the name exactly as shown, character for character, aside from the alliance-tag removal above. Do not simplify, translate, or convert to plain ASCII. Decorative brackets that are part of the commander's own styling (e.g. "꧁ROY꧂") are NOT alliance tags and must be kept — only a leading alliance-identifier prefix gets removed.
 
 For every row, also return a confidence score from 0-100 reflecting how legible/certain you are about that row's name and score specifically (not the image as a whole). Use lower confidence for: blurry text, partially cut-off rows, ambiguous characters, or low contrast.
 
 Respond with ONLY a JSON array, no other text, no markdown fences. Each element:
-{"rank": number | null, "name": string, "score": number | null, "confidence": number}
+{"name": string, "score": number | null, "confidence": number}
 
 If a screenshot contains no readable leaderboard rows at all, respond with an empty array: []`
 
@@ -94,7 +97,7 @@ async function callGemini(image: ExtractImageInput, selected: SelectedKey) {
             },
           },
           {
-            text: 'Extract every rank/name/score row from this Dual leaderboard screenshot as a JSON array.',
+            text: 'Extract every commander name and score row from this Dual leaderboard screenshot as a JSON array.',
           },
         ],
       },
@@ -146,7 +149,6 @@ export async function extractRowsFromImage(
       return parsed.map((row): RawExtractedRow => ({
         sourceImageId:   image.sourceImageId,
         sourceImageName: image.sourceImageName,
-        rank:            typeof row.rank === 'number' ? row.rank : null,
         detectedName:    typeof row.name === 'string' ? row.name : '',
         score:           typeof row.score === 'number' ? row.score : null,
         ocrConfidence:   typeof row.confidence === 'number'

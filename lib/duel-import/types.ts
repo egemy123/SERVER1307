@@ -1,8 +1,13 @@
 // lib/duel-import/types.ts
 //
 // Shared types for the Bulk Dual Screenshot Import feature.
-// Pipeline: Upload -> Extract (OCR/AI) -> Match -> Dedupe/Rank-validate
-// -> Review (editable) -> merge into Detailed Mode score grid.
+// Pipeline: Upload -> Extract (OCR/AI) -> Match -> Dedupe -> Review
+// (editable) -> merge into Detailed Mode score grid.
+//
+// Extraction is NAME + SCORE only — no rank. Rank was never persisted to
+// duel_entries (that table never had a rank column), so it was
+// review-only weight with no functional use; dropped entirely rather than
+// carried as dead data through the pipeline.
 //
 // IMPORTANT: this feature only ever populates SCORES for Detailed Mode
 // entry. It never writes to duel_entries/duel_day_results directly and
@@ -11,11 +16,10 @@
 
 export type ConfidenceStatus = 'auto_accept' | 'review' | 'manual'
 
-/** A single rank/name/score triplet as read off one screenshot, pre-matching. */
+/** A single name/score pair as read off one screenshot, pre-matching. */
 export interface RawExtractedRow {
   sourceImageId: string
   sourceImageName: string
-  rank: number | null
   detectedName: string
   score: number | null
   /** 0-100 — how legible/confident the model was reading this row. */
@@ -35,10 +39,6 @@ export interface MatchedRow extends RawExtractedRow {
   status: ConfidenceStatus
   /** Set once this row has been superseded by a higher-scoring duplicate. */
   isDuplicate: boolean
-  /** Set if this row's rank disagrees with another same-commander row in a
-   *  way that looks like a genuine reading error rather than just two
-   *  different screenshots of a moving leaderboard. */
-  rankFlag: boolean
 }
 
 /** Final, reviewable/editable row shown in the Review Screen. */

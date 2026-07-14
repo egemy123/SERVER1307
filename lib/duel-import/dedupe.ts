@@ -1,6 +1,7 @@
 // lib/duel-import/dedupe.ts
-// Resolves duplicate commanders across screenshots (keep highest score)
-// and flags rank inconsistencies for review.
+// Resolves duplicate commanders across screenshots — keeps the highest
+// score per commander, discards the rest. No rank logic — rank was
+// dropped from extraction entirely (name + score only).
 
 import type { MatchedRow, ReviewRow, DuplicateGroup } from './types'
 
@@ -11,18 +12,10 @@ function toReviewRow(row: MatchedRow): ReviewRow {
 /**
  * Groups rows by matched commander (or by normalized detected name for
  * unmatched rows, so obvious repeats still get deduped even before a
- * human assigns them to a roster commander), keeps the highest-scoring
- * row per group, and marks the rest as duplicates.
- *
- * Rank validation: if two rows for the SAME commander have different
- * ranks AND their scores are within 1% of each other, that's very likely
- * a genuine OCR misread (the leaderboard shouldn't have moved that little
- * between two screenshots yet show different ranks) — flagged for review.
- * Large score gaps between duplicates are treated as two different
- * snapshots in time and not flagged, since the leaderboard legitimately
- * changes between screenshots.
+ * human assigns them to a roster commander), and keeps the highest-scoring
+ * row per group, marking the rest as duplicates.
  */
-export function resolveDuplicatesAndRanks(rows: MatchedRow[]): {
+export function resolveDuplicates(rows: MatchedRow[]): {
   rows: ReviewRow[]
   duplicates: DuplicateGroup[]
 } {
@@ -49,24 +42,10 @@ export function resolveDuplicatesAndRanks(rows: MatchedRow[]): {
     const winner = sorted[0]
     const losers = sorted.slice(1)
 
-    // Rank consistency check across the group.
-    const distinctRanks = new Set(groupRows.map(r => r.rank).filter(r => r !== null))
-    let rankFlag = false
-    if (distinctRanks.size > 1 && winner.score !== null) {
-      for (const loser of losers) {
-        if (loser.score === null) continue
-        const pctDiff = Math.abs(winner.score - loser.score) / Math.max(winner.score, 1)
-        if (loser.rank !== winner.rank && pctDiff < 0.01) {
-          rankFlag = true
-          break
-        }
-      }
-    }
-
-    const winnerReview: ReviewRow = { ...toReviewRow(winner), isDuplicate: false, rankFlag }
+    const winnerReview: ReviewRow = { ...toReviewRow(winner), isDuplicate: false }
     finalRows.push(winnerReview)
 
-    const loserReviews = losers.map(l => toReviewRow({ ...l, isDuplicate: true, rankFlag }))
+    const loserReviews = losers.map(l => toReviewRow({ ...l, isDuplicate: true }))
     finalRows.push(...loserReviews)
 
     if (winner.matchedUid) {

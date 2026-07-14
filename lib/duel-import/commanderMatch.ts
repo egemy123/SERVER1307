@@ -32,7 +32,6 @@ export function matchExtractedRows(
       confidence,
       status: confidenceStatus(confidence),
       isDuplicate: false,
-      rankFlag: false,
     }
   })
 }

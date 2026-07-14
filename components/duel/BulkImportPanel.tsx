@@ -344,7 +344,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   <thead>
                     <tr className="border-b border-tactical-100">
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Screenshot</th>
-                      <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Rank</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Detected</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Matched</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Score</th>
@@ -355,17 +354,8 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   </thead>
                   <tbody>
                     {visibleRows.map(row => (
-                      <tr key={row.rowId} className={`border-b border-tactical-50 ${row.rankFlag ? 'bg-amber-50/50' : ''}`}>
+                      <tr key={row.rowId} className="border-b border-tactical-50">
                         <td className="py-1.5 pr-2 text-tactical-400 truncate max-w-[100px]">{row.sourceImageName}</td>
-                        <td className="py-1.5 pr-2">
-                          <input
-                            type="number"
-                            value={row.rank ?? ''}
-                            onChange={e => updateRow(row.rowId, { rank: e.target.value ? parseInt(e.target.value) : null })}
-                            className="w-14 px-1 py-0.5 rounded border border-tactical-200 font-mono"
-                          />
-                          {row.rankFlag && <span className="text-amber-500 ml-1" title="Rank inconsistency detected">⚠</span>}
-                        </td>
                         <td className="py-1.5 pr-2 text-tactical-600">{row.detectedName}</td>
                         <td className="py-1.5 pr-2">
                           <select
