@@ -19,9 +19,10 @@ import { getKeySequence, getKeyCount, type SelectedKey } from './keyManager'
 // prior migration notes for why this replaced gemini-2.5-flash.
 const MODEL = 'gemini-3.5-flash'
 
-const MAX_KEY_ATTEMPTS_PER_IMAGE = 4 // try up to this many keys before giving up on one image
-const BASE_BACKOFF_MS = 500
-const MAX_BACKOFF_MS = 8000
+const MAX_KEY_ATTEMPTS_PER_IMAGE = 3 // was 4 — fewer attempts means faster worst-case total time
+const BASE_BACKOFF_MS = 400
+const MAX_BACKOFF_MS = 2500 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
+const REQUEST_TIMEOUT_MS = 20000 // hard cap per API call — a hung request now fails fast instead of blocking a worker slot indefinitely
 
 const EXTRACTION_SYSTEM_PROMPT = `You read Last War: Survival "Dual" leaderboard screenshots and extract every row as structured data.
 
@@ -49,6 +50,14 @@ interface ExtractImageInput {
 
 export class ExtractionError extends Error {}
 
+/** Internal only — a response-format hiccup (empty text, malformed JSON,
+ *  non-array). Distinct from ExtractionError so the retry loop below
+ *  treats it as retryable instead of bailing out on the first attempt.
+ *  responseMimeType: 'application/json' should almost always produce
+ *  clean JSON; when it doesn't, it's usually a one-off glitch worth
+ *  retrying, not a reason to fail the whole image immediately. */
+class RetryableParseError extends Error {}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -67,6 +76,8 @@ function backoffDelay(attempt: number): number {
  * since switching keys or waiting won't fix those.
  */
 function isTransientError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'AbortError') return true // our own REQUEST_TIMEOUT_MS firing
+
   const status =
     (err as any)?.status ??
     (err as any)?.code ??
@@ -84,29 +95,38 @@ function isTransientError(err: unknown): boolean {
 
 async function callGemini(image: ExtractImageInput, selected: SelectedKey) {
   const ai = new GoogleGenAI({ apiKey: selected.key })
-  return ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            inlineData: {
-              mimeType: image.mediaType,
-              data: image.base64Data,
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    return await ai.models.generateContent({
+      model: MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: image.mediaType,
+                data: image.base64Data,
+              },
             },
-          },
-          {
-            text: 'Extract every commander name and score row from this Dual leaderboard screenshot as a JSON array.',
-          },
-        ],
+            {
+              text: 'Extract every commander name and score row from this Dual leaderboard screenshot as a JSON array.',
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: EXTRACTION_SYSTEM_PROMPT,
+        responseMimeType: 'application/json',
+        abortSignal: controller.signal,
       },
-    ],
-    config: {
-      systemInstruction: EXTRACTION_SYSTEM_PROMPT,
-      responseMimeType: 'application/json',
-    },
-  })
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 export async function extractRowsFromImage(
@@ -132,7 +152,7 @@ export async function extractRowsFromImage(
 
       const text = response.text
       if (!text) {
-        throw new ExtractionError('No text response from vision API')
+        throw new RetryableParseError('No text response from vision API')
       }
 
       let parsed: any[]
@@ -140,10 +160,10 @@ export async function extractRowsFromImage(
         const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
         parsed = JSON.parse(cleaned)
       } catch {
-        throw new ExtractionError('Could not parse extraction result as JSON')
+        throw new RetryableParseError('Could not parse extraction result as JSON')
       }
       if (!Array.isArray(parsed)) {
-        throw new ExtractionError('Extraction result was not a JSON array')
+        throw new RetryableParseError('Extraction result was not a JSON array')
       }
 
       return parsed.map((row): RawExtractedRow => ({
@@ -160,12 +180,12 @@ export async function extractRowsFromImage(
       lastError = err
 
       if (err instanceof ExtractionError) {
-        // Non-transient failure inside our own parsing (malformed JSON,
-        // empty response) — no point retrying with a different key.
+        // Genuinely fatal — not a network/format hiccup, no point retrying.
         throw err
       }
 
-      if (!isTransientError(err)) {
+      const retryable = err instanceof RetryableParseError || isTransientError(err)
+      if (!retryable) {
         // Bad request, invalid key, auth error, etc. — a different key
         // won't fix this, and retrying just wastes time and quota.
         const message = err instanceof Error ? err.message : String(err)
@@ -174,7 +194,8 @@ export async function extractRowsFromImage(
       }
 
       const message = err instanceof Error ? err.message : String(err)
-      console.error(`[gemini-extract] key #${selected.index} failed (transient) for "${image.sourceImageName}", attempt ${attempt + 1}/${keySequence.length}: ${message.slice(0, 200)}`)
+      const reason = err instanceof RetryableParseError ? 'format hiccup' : 'transient'
+      console.error(`[gemini-extract] key #${selected.index} failed (${reason}) for "${image.sourceImageName}", attempt ${attempt + 1}/${keySequence.length}: ${message.slice(0, 200)}`)
 
       const isLastAttempt = attempt === keySequence.length - 1
       if (!isLastAttempt) {
@@ -185,7 +206,7 @@ export async function extractRowsFromImage(
 
   const message = lastError instanceof Error ? lastError.message : String(lastError)
   throw new ExtractionError(
-    `All ${keySequence.length} configured Gemini API key(s) failed (rate limited or unavailable) for "${image.sourceImageName}". Last error: ${message.slice(0, 200)}`,
+    `All ${keySequence.length} attempt(s) failed for "${image.sourceImageName}". Last error: ${message.slice(0, 200)}`,
   )
 }
 

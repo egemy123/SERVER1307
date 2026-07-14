@@ -93,7 +93,10 @@ export function confidenceStatus(confidence: number): ConfidenceStatus {
 }
 
 export const IMPORT_LIMITS = {
-  maxImages: 50,
+  maxImages: 20, // was 50 — that never fit inside Vercel Hobby's 60s function timeout;
+                 // ~20 images at concurrency 3 with the tightened retry/backoff above
+                 // comfortably stays under 60s in the normal case. Raise this back up
+                 // if/when maxDuration goes back to 300 (Vercel Pro).
   maxSizeBytes: 10 * 1024 * 1024, // 10MB
   acceptedTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'] as const,
 }

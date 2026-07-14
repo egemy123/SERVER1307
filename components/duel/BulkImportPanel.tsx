@@ -240,7 +240,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                 <p className="text-3xl mb-2">📷</p>
                 <p className="font-medium text-tactical-900">Drag & drop screenshots here</p>
                 <p className="text-sm text-tactical-500 mt-1">or click to select multiple images</p>
-                <p className="text-xs text-tactical-400 mt-3">PNG, JPG, JPEG, WEBP · up to 50 images · 10MB each</p>
+                <p className="text-xs text-tactical-400 mt-3">PNG, JPG, JPEG, WEBP · up to {IMPORT_LIMITS.maxImages} images · 10MB each</p>
                 <input
                   ref={fileInputRef}
                   type="file"
