@@ -34,7 +34,7 @@ const REQUEST_TIMEOUT_MS = 20000
 // depending on which path produced them.
 const EXTRACTION_PROMPT = `You read Last War: Survival "Dual" leaderboard screenshots and extract every row as structured data.
 
-Each row has two fields you need: Commander Name and Dual Score (integer, may contain commas/periods as thousands separators). Ignore any rank/position number shown on the row — it is not needed and must not be included in your output.
+Each row has three fields you need: Rank (the row's position number, an integer), Commander Name, and Dual Score (integer, may contain commas/periods as thousands separators).
 
 CRITICAL — Alliance tags:
 Some rows may show an alliance tag or prefix immediately before the commander's own name — typically in brackets, e.g. "[IMC] Roy", "【7C】Xòm", "(GMG) Serfe". This tag identifies the alliance, not the commander. EXCLUDE it entirely from the name field — return ONLY the commander's own name, with no leading bracket, tag, or alliance identifier of any kind. "[IMC] Roy" must be returned as "Roy", not "[IMC] Roy" and not "IMC Roy".
@@ -45,7 +45,7 @@ Once the alliance tag (if any) is stripped, commander names frequently use styli
 For every row, also return a confidence score from 0-100 reflecting how legible/certain you are about that row's name and score specifically (not the image as a whole). Use lower confidence for: blurry text, partially cut-off rows, ambiguous characters, or low contrast.
 
 Respond with ONLY a JSON array, no other text before or after it, no markdown code fences. Each element:
-{"name": string, "score": number | null, "confidence": number}
+{"rank": number | null, "name": string, "score": number | null, "confidence": number}
 
 If the screenshot contains no readable leaderboard rows at all, respond with an empty array: []`
 
@@ -158,6 +158,7 @@ export async function attemptNvidiaExtraction(
     .map((row): RawExtractedRow => ({
       sourceImageId,
       sourceImageName,
+      rank:          typeof row.rank === 'number' ? row.rank : null,
       detectedName:  typeof row.name === 'string' ? row.name : '',
       score:         typeof row.score === 'number' ? row.score : null,
       ocrConfidence: typeof row.confidence === 'number'

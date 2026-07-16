@@ -430,9 +430,14 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                               const uid = e.target.value || null
                               updateRow(row.rowId, { matchedUid: uid, matchedName: uid ? rosterByUid[uid] : null })
                             }}
-                            className="px-1 py-0.5 rounded border border-tactical-200 max-w-[140px]"
+                            className={`px-1 py-0.5 rounded border max-w-[160px] ${
+                              row.matchedUid ? 'border-tactical-200' : 'border-amber-400 bg-amber-50 text-amber-700'
+                            }`}
                           >
-                            <option value="">— unmatched —</option>
+                            {/* Shows the actual detected name instead of a generic
+                                "unmatched" label — this person may just not be in
+                                the roster yet (new member) rather than a bad read. */}
+                            <option value="">⚠ {row.detectedName || 'unmatched'} — not in roster</option>
                             {roster.map(r => (
                               <option key={r.uid} value={r.uid}>{r.name}</option>
                             ))}
@@ -475,6 +480,18 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   </div>
                 </details>
               )}
+
+              {(() => {
+                const unmatchedCount = visibleRows.filter(r => !r.matchedUid).length
+                if (unmatchedCount === 0) return null
+                return (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                    ⚠ {unmatchedCount} commander{unmatchedCount !== 1 ? 's' : ''} detected but not found in your
+                    alliance roster — their score{unmatchedCount !== 1 ? 's' : ''} won't be added. If they're a new
+                    member, add them under <b>Members</b> first, then re-run Bulk Import.
+                  </div>
+                )
+              })()}
 
               <div className="flex gap-3">
                 <button onClick={() => setStage('upload')} className="flex-1 btn-secondary">← Start Over</button>
