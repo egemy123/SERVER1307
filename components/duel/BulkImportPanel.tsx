@@ -9,15 +9,7 @@
 // requires the normal "Next: Alliance Result" step before locking the day.
 
 import { useState, useRef, useCallback, useMemo } from 'react'
-import { IMPORT_LIMITS, type ReviewRow, type DuplicateGroup, type FailedImage, type ImportSummary, type ImportProgressEvent, type MatchedRow } from '@/lib/duel-import/types'
-import { resolveDuplicates } from '@/lib/duel-import/dedupe'
-
-// Vercel Hobby caps serverless functions at 60s. A single request handling
-// many images (each needing a Gemini call, sometimes with retries) can
-// blow past that with no clean error — the connection just goes dead
-// mid-stream. Splitting into smaller sequential requests keeps every
-// individual request comfortably under the limit even in a bad case.
-const CHUNK_SIZE = 6
+import { IMPORT_LIMITS, type ReviewRow, type DuplicateGroup, type FailedImage, type ImportSummary } from '@/lib/duel-import/types'
 
 interface RosterCommander { uid: string; name: string }
 
@@ -51,7 +43,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
   const [failedImages, setFailedImages] = useState<FailedImage[]>([])
   const [summary, setSummary]       = useState<ImportSummary | null>(null)
   const [processError, setProcessError] = useState('')
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -123,123 +114,108 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     setFailedImages([])
 
     const startTime = Date.now()
-    const chunks: StagedImage[][] = []
-    for (let i = 0; i < staged.length; i += CHUNK_SIZE) {
-      chunks.push(staged.slice(i, i + CHUNK_SIZE))
-    }
+    const allRawRows: any[] = []
+    const localFailedImages: { sourceImageId: string; sourceImageName: string; reason: string }[] = []
+    let ocrCount = 0
+    let aiCount = 0
+    let completed = 0
 
-    // Accumulated across all chunks. rowsAcc holds every row from every
-    // chunk exactly as the server returned it (already deduped WITHIN its
-    // own chunk) — cross-chunk duplicates get resolved in one merge pass
-    // after the loop, not per-chunk.
-    let completedSoFar = 0
-    const rowsAcc: ReviewRow[] = []
-    const duplicatesAcc: DuplicateGroup[] = []
-    const failedImagesAcc: FailedImage[] = []
-    let imagesUploaded = 0, imagesProcessed = 0, imagesFailed = 0, rowsExtracted = 0
+    // Each image is its own small request — no giant batched payload
+    // (fixes "Request Entity Too Large"), and no single long-lived
+    // function processing the whole batch (fixes Vercel timeouts on
+    // 15-20+ image batches). A slow or failed image never takes down
+    // the rest — the loop just moves on. Limited concurrency (2 at a
+    // time) keeps this polite to the OCR/AI backends without being as
+    // fragile as one big request.
+    const CONCURRENCY = 2
+    let cursor = 0
 
-    try {
-      for (const chunk of chunks) {
-        const images = await Promise.all(chunk.map(async s => ({
-          name: s.file.name,
-          mediaType: s.file.type,
-          base64Data: await fileToBase64(s.file),
-        })))
+    async function worker() {
+      while (cursor < staged.length) {
+        const myIndex = cursor++
+        const staged_ = staged[myIndex]
+        const sourceImageId = staged_.id
 
-        const res = await fetch('/api/duel/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ alliance_id: allianceId, images }),
-        })
+        try {
+          const base64Data = await fileToBase64(staged_.file)
+          const res = await fetch('/api/duel/import/extract-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              alliance_id: allianceId,
+              source_image_id: sourceImageId,
+              name: staged_.file.name,
+              mediaType: staged_.file.type,
+              base64Data,
+            }),
+          })
+          const data = await res.json()
 
-        if (!res.body) throw new Error('No response stream from server')
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        const chunkBaseIndex = completedSoFar
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-
-          for (const line of lines) {
-            if (!line.trim()) continue
-            const event: ImportProgressEvent = JSON.parse(line)
-
-            if (event.type === 'progress') {
-              setProgressIndex(chunkBaseIndex + event.imageIndex)
-              setProgressTotal(staged.length)
-              setProgressImageName(event.imageName)
-            } else if (event.type === 'image_failed') {
-              setFailedImages(prev => [...prev, {
-                sourceImageId: event.sourceImageId,
-                sourceImageName: event.sourceImageName,
-                reason: event.reason,
-              }])
-            } else if (event.type === 'done') {
-              rowsAcc.push(...event.rows)
-              duplicatesAcc.push(...event.duplicates)
-              failedImagesAcc.push(...event.failedImages)
-              imagesUploaded  += event.summary.imagesUploaded
-              imagesProcessed += event.summary.imagesProcessed
-              imagesFailed    += event.summary.imagesFailed
-              rowsExtracted   += event.summary.rowsExtracted
-              completedSoFar  += chunk.length
-              setProgressIndex(completedSoFar)
-            } else if (event.type === 'error') {
-              // One chunk failing outright shouldn't nuke everything the
-              // other chunks already extracted — record it and move on.
-              failedImagesAcc.push(...chunk.map(s => ({
-                sourceImageId: s.id,
-                sourceImageName: s.file.name,
-                reason: event.message,
-              })))
-              imagesUploaded += chunk.length
-              imagesFailed   += chunk.length
-              completedSoFar += chunk.length
-              setProgressIndex(completedSoFar)
-            }
+          if (!res.ok) {
+            localFailedImages.push({
+              sourceImageId,
+              sourceImageName: staged_.file.name,
+              reason: data.error ?? `Server error (${res.status})`,
+            })
+          } else {
+            allRawRows.push(...(data.rows ?? []))
+            if (data.source === 'nvidia') ocrCount++
+            else aiCount++
           }
+        } catch (err) {
+          localFailedImages.push({
+            sourceImageId,
+            sourceImageName: staged_.file.name,
+            reason: err instanceof Error ? err.message : 'Failed to process image',
+          })
+        } finally {
+          completed++
+          setProgressIndex(completed)
+          setProgressImageName(staged_.file.name)
+          setFailedImages([...localFailedImages])
         }
       }
+    }
 
-      // ── Cross-chunk duplicate merge ──────────────────────────────────
-      // Each chunk already deduped WITHIN itself. Now catch duplicates
-      // that span chunk boundaries: take only each chunk's surviving
-      // winners (isDuplicate === false), run them through the same
-      // resolveDuplicates logic used server-side, and splice the result
-      // back in alongside the untouched chunk-local losers.
-      const winners = rowsAcc.filter(r => !r.isDuplicate)
-      const chunkLocalLosers = rowsAcc.filter(r => r.isDuplicate)
-      const { rows: mergedWinners, duplicates: crossChunkDuplicates } =
-        resolveDuplicates(winners as MatchedRow[])
+    try {
+      const workers = Array.from({ length: Math.min(CONCURRENCY, staged.length) }, () => worker())
+      await Promise.all(workers)
 
-      const finalRows = [...mergedWinners, ...chunkLocalLosers]
-      const finalDuplicates = [...duplicatesAcc, ...crossChunkDuplicates]
+      // Finalize — matching/dedupe on the aggregated rows. No images in
+      // this payload, so it's always small and fast regardless of how
+      // many screenshots were in the batch.
+      const finalizeRes = await fetch('/api/duel/import/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alliance_id: allianceId, rows: allRawRows }),
+      })
+      const finalizeData = await finalizeRes.json()
 
-      const summary: ImportSummary = {
-        imagesUploaded,
-        imagesProcessed,
-        imagesFailed,
-        rowsExtracted,
-        uniqueCommanders:    new Set(finalRows.filter(r => !r.isDuplicate).map(r => r.matchedUid ?? r.rowId)).size,
-        duplicateCommanders: finalDuplicates.length,
-        correctedNames:      finalRows.filter(r => r.matchedName && r.matchedName !== r.detectedName).length,
-        reviewRequired:      finalRows.filter(r => r.status === 'review').length,
-        manualRequired:      finalRows.filter(r => r.status === 'manual').length,
-        failedRows:          rowsExtracted - finalRows.length,
-        processingTimeMs:    Date.now() - startTime,
+      if (!finalizeRes.ok) {
+        setProcessError(finalizeData.error ?? 'Failed to finalize import')
+        setStage('upload')
+        return
       }
 
-      setRows(finalRows)
-      setDuplicates(finalDuplicates)
-      setFailedImages(failedImagesAcc)
-      setSummary(summary)
+      setRows(finalizeData.rows)
+      setDuplicates(finalizeData.duplicates)
+      setSummary({
+        imagesUploaded:      staged.length,
+        imagesProcessed:     staged.length - localFailedImages.length,
+        imagesFailed:        localFailedImages.length,
+        rowsExtracted:       finalizeData.rowsExtracted,
+        uniqueCommanders:    finalizeData.uniqueCommanders,
+        duplicateCommanders: finalizeData.duplicateCommanders,
+        correctedNames:      finalizeData.correctedNames,
+        reviewRequired:      finalizeData.reviewRequired,
+        manualRequired:      finalizeData.manualRequired,
+        failedRows:          finalizeData.failedRows,
+        processingTimeMs:    Date.now() - startTime,
+        // Transparency on the NVIDIA-first savings — how many screenshots
+        // never needed to touch the paid Gemini path at all.
+        imagesReadByOcr:     ocrCount,
+        imagesReadByAi:      aiCount,
+      } as ImportSummary)
       setStage('review')
     } catch (err) {
       setProcessError(err instanceof Error ? err.message : 'Import failed')
@@ -274,35 +250,8 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  // ── Close confirmation ───────────────────────────────────────────────
-  // "Nothing to lose" only when the panel is empty and idle — anything
-  // beyond that (files staged, actively processing, or extracted results
-  // sitting unreviewed) means closing throws real work away silently.
-  const hasUnsavedProgress =
-    stage === 'processing' ||
-    stage === 'review' ||
-    (stage === 'upload' && staged.length > 0)
-
-  const closeWarningText = (() => {
-    if (stage === 'processing') {
-      return `Import is still running (image ${progressIndex} of ${progressTotal}). Closing now will stop it — nothing processed so far will be saved.`
-    }
-    if (stage === 'review') {
-      return `You have ${rows.length} extracted score${rows.length !== 1 ? 's' : ''} waiting for review. Closing now will discard ${rows.length !== 1 ? 'them' : 'it'} — none of it will be added to the entry.`
-    }
-    return `You have ${staged.length} screenshot${staged.length !== 1 ? 's' : ''} selected. Closing now will clear ${staged.length !== 1 ? 'them' : 'it'}.`
-  })()
-
-  const requestClose = useCallback(() => {
-    if (hasUnsavedProgress) {
-      setShowCloseConfirm(true)
-    } else {
-      onClose()
-    }
-  }, [hasUnsavedProgress, onClose])
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={requestClose}>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
@@ -316,39 +265,8 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
               {stage === 'review' && 'Review extracted scores before adding them'}
             </p>
           </div>
-          <button onClick={requestClose} className="text-tactical-400 hover:text-tactical-700 text-xl leading-none px-2">×</button>
+          <button onClick={onClose} className="text-tactical-400 hover:text-tactical-700 text-xl leading-none px-2">×</button>
         </div>
-
-        {showCloseConfirm && (
-          <div
-            className="fixed inset-0 z-20 bg-black/30 flex items-center justify-center p-4"
-            onClick={() => setShowCloseConfirm(false)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4"
-              onClick={e => e.stopPropagation()}
-            >
-              <div>
-                <p className="font-semibold text-tactical-900">Close this import?</p>
-                <p className="text-sm text-tactical-500 mt-1.5">{closeWarningText}</p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowCloseConfirm(false)}
-                  className="flex-1 btn-secondary"
-                >
-                  Keep Going
-                </button>
-                <button
-                  onClick={() => { setShowCloseConfirm(false); onClose() }}
-                  className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
-                >
-                  Discard &amp; Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="p-5">
 
@@ -373,7 +291,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                 <p className="text-3xl mb-2">📷</p>
                 <p className="font-medium text-tactical-900">Drag & drop screenshots here</p>
                 <p className="text-sm text-tactical-500 mt-1">or click to select multiple images</p>
-                <p className="text-xs text-tactical-400 mt-3">PNG, JPG, JPEG, WEBP · up to {IMPORT_LIMITS.maxImages} images · 10MB each</p>
+                <p className="text-xs text-tactical-400 mt-3">PNG, JPG, JPEG, WEBP · up to 50 images · 10MB each</p>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -442,10 +360,12 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
             <div className="flex flex-col gap-5">
 
               {/* Summary */}
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[
                   ['Uploaded',   summary.imagesUploaded],
                   ['Processed',  summary.imagesProcessed],
+                  ['Read by NVIDIA', summary.imagesReadByOcr ?? 0],
+                  ['Read by AI',  summary.imagesReadByAi ?? 0],
                   ['Rows',       summary.rowsExtracted],
                   ['Unique',     summary.uniqueCommanders],
                   ['Duplicates', summary.duplicateCommanders],
@@ -461,6 +381,9 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-tactical-500 -mt-3">
+                {summary.imagesReadByOcr ?? 0} screenshot{(summary.imagesReadByOcr ?? 0) !== 1 ? 's' : ''} read for free by NVIDIA — only {summary.imagesReadByAi ?? 0} needed the Gemini fallback.
+              </p>
 
               {failedImages.length > 0 && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200">
@@ -477,6 +400,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   <thead>
                     <tr className="border-b border-tactical-100">
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Screenshot</th>
+                      <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Rank</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Detected</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Matched</th>
                       <th className="text-left py-2 pr-2 text-tactical-500 font-medium">Score</th>
@@ -487,8 +411,17 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   </thead>
                   <tbody>
                     {visibleRows.map(row => (
-                      <tr key={row.rowId} className="border-b border-tactical-50">
+                      <tr key={row.rowId} className={`border-b border-tactical-50 ${row.rankFlag ? 'bg-amber-50/50' : ''}`}>
                         <td className="py-1.5 pr-2 text-tactical-400 truncate max-w-[100px]">{row.sourceImageName}</td>
+                        <td className="py-1.5 pr-2">
+                          <input
+                            type="number"
+                            value={row.rank ?? ''}
+                            onChange={e => updateRow(row.rowId, { rank: e.target.value ? parseInt(e.target.value) : null })}
+                            className="w-14 px-1 py-0.5 rounded border border-tactical-200 font-mono"
+                          />
+                          {row.rankFlag && <span className="text-amber-500 ml-1" title="Rank inconsistency detected">⚠</span>}
+                        </td>
                         <td className="py-1.5 pr-2 text-tactical-600">{row.detectedName}</td>
                         <td className="py-1.5 pr-2">
                           <select

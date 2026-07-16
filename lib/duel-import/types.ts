@@ -1,13 +1,8 @@
 // lib/duel-import/types.ts
 //
 // Shared types for the Bulk Dual Screenshot Import feature.
-// Pipeline: Upload -> Extract (OCR/AI) -> Match -> Dedupe -> Review
-// (editable) -> merge into Detailed Mode score grid.
-//
-// Extraction is NAME + SCORE only — no rank. Rank was never persisted to
-// duel_entries (that table never had a rank column), so it was
-// review-only weight with no functional use; dropped entirely rather than
-// carried as dead data through the pipeline.
+// Pipeline: Upload -> Extract (OCR/AI) -> Match -> Dedupe/Rank-validate
+// -> Review (editable) -> merge into Detailed Mode score grid.
 //
 // IMPORTANT: this feature only ever populates SCORES for Detailed Mode
 // entry. It never writes to duel_entries/duel_day_results directly and
@@ -16,10 +11,13 @@
 
 export type ConfidenceStatus = 'auto_accept' | 'review' | 'manual'
 
-/** A single name/score pair as read off one screenshot, pre-matching. */
+/** A single rank/name/score triplet as read off one screenshot, pre-matching. */
 export interface RawExtractedRow {
   sourceImageId: string
   sourceImageName: string
+  /** Only populated by the local OCR path — the AI extraction path
+   *  deliberately ignores rank/position (see extract.ts's system prompt). */
+  rank?: number | null
   detectedName: string
   score: number | null
   /** 0-100 — how legible/confident the model was reading this row. */
@@ -39,6 +37,10 @@ export interface MatchedRow extends RawExtractedRow {
   status: ConfidenceStatus
   /** Set once this row has been superseded by a higher-scoring duplicate. */
   isDuplicate: boolean
+  /** No longer set by dedupe.ts (rank validation was dropped along with
+   *  rank extraction) — kept optional so the Review UI's existing
+   *  rankFlag warning icon still type-checks without every row needing it. */
+  rankFlag?: boolean
 }
 
 /** Final, reviewable/editable row shown in the Review Screen. */
@@ -66,6 +68,11 @@ export interface ImportSummary {
   manualRequired: number
   failedRows: number
   processingTimeMs: number
+  /** How many screenshots were resolved by the free local OCR pass alone
+   *  (never touched the paid AI path). */
+  imagesReadByOcr?: number
+  /** How many screenshots needed AI because OCR wasn't confident enough. */
+  imagesReadByAi?: number
 }
 
 export interface FailedImage {
@@ -93,10 +100,7 @@ export function confidenceStatus(confidence: number): ConfidenceStatus {
 }
 
 export const IMPORT_LIMITS = {
-  maxImages: 20, // was 50 — that never fit inside Vercel Hobby's 60s function timeout;
-                 // ~20 images at concurrency 3 with the tightened retry/backoff above
-                 // comfortably stays under 60s in the normal case. Raise this back up
-                 // if/when maxDuration goes back to 300 (Vercel Pro).
+  maxImages: 50,
   maxSizeBytes: 10 * 1024 * 1024, // 10MB
   acceptedTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'] as const,
 }
