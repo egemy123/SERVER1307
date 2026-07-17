@@ -89,8 +89,10 @@ export async function POST(req: Request) {
       }))
 
       try {
+        // We now pass "roster" as the 2nd argument here so extractRowsFromImages can verify Nvidia outputs!
         const rawRows = await extractRowsFromImages(
           imagesWithIds,
+          roster ?? [], // <-- PASSED ROSTER HERE
           (completedIndex, image) => {
             controller.enqueue(encoder.encode(ndjson({
               type: 'progress',

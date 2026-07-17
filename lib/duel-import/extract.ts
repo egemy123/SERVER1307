@@ -1,19 +1,13 @@
 // lib/duel-import/extract.ts
-// SERVER-ONLY. Calls Google's Gemini vision API to read commander
-// name/score pairs off a Last War Dual leaderboard screenshot.
-//
-// Resilience: round-robins across every configured GEMINI_API_KEY_* (see
-// keyManager.ts). On a transient error (429 rate limit, 503 overloaded, or
-// a network timeout), retries with the NEXT configured key, with
-// exponential backoff between attempts. Non-transient errors (bad request,
-// invalid key, malformed response) fail immediately without burning
-// retries or other keys' quota. If every configured key is exhausted, this
-// throws a clear ExtractionError — a fresh screenshot just fails and gets
-// reported to the user, same as before; nothing is silently dropped.
+// SERVER-ONLY. Try cheap/free Nvidia NIM extraction first. If it is bypassed
+// or fails to hit roster confidence, we fallback and round-robin across
+// configured GEMINI_API_KEY_* keys.
 
 import { GoogleGenAI } from '@google/genai'
 import type { RawExtractedRow } from './types'
 import { getKeySequence, getKeyCount, type SelectedKey } from './keyManager'
+import { attemptNvidiaExtraction } from './nvidiaExtract'
+import type { RosterCommander } from './textMatch'
 
 // gemini-3.5-flash: Google's current GA multimodal model. See git history /
 // prior migration notes for why this replaced gemini-2.5-flash.
@@ -131,7 +125,22 @@ async function callGemini(image: ExtractImageInput, selected: SelectedKey) {
 
 export async function extractRowsFromImage(
   image: ExtractImageInput,
+  roster: RosterCommander[],
 ): Promise<RawExtractedRow[]> {
+  // 1. First Pass: Attempt Free/Cheap NVIDIA NIM OCR
+  const nvidiaResult = await attemptNvidiaExtraction(
+    image.sourceImageId,
+    image.sourceImageName,
+    image.base64Data,
+    image.mediaType,
+    roster,
+  )
+
+  if (nvidiaResult.accepted) {
+    return nvidiaResult.rows
+  }
+
+  // 2. Fallback Pass: If NVIDIA results are rejected or fail, escalate to Gemini
   const keyCount = getKeyCount()
   if (keyCount === 0) {
     throw new ExtractionError(
@@ -220,6 +229,7 @@ export async function extractRowsFromImage(
  */
 export async function extractRowsFromImages(
   images: ExtractImageInput[],
+  roster: RosterCommander[],
   onProgress: (completedIndex: number, image: ExtractImageInput) => void,
   onImageFailed: (image: ExtractImageInput, reason: string) => void,
   concurrency = 3,
@@ -233,7 +243,7 @@ export async function extractRowsFromImages(
       const myIndex = cursor++
       const image = images[myIndex]
       try {
-        const rows = await extractRowsFromImage(image)
+        const rows = await extractRowsFromImage(image, roster)
         allRows.push(...rows)
       } catch (err) {
         onImageFailed(image, err instanceof Error ? err.message : 'Unknown extraction error')
