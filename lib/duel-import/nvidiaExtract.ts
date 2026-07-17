@@ -143,6 +143,7 @@ export async function attemptNvidiaExtraction(
   if (!apiKey) {
     // No key configured — treat as "not accepted" so every image just
     // falls through to Gemini, rather than hard-failing the batch.
+    console.error(`[nvidia-extract] SKIPPED for "${sourceImageName}": NVIDIA_API_KEY is not set in this environment.`)
     return { accepted: false, rows: [] }
   }
 
@@ -150,7 +151,7 @@ export async function attemptNvidiaExtraction(
   try {
     parsed = await callNvidia({ sourceImageId, sourceImageName, base64Data, mediaType }, apiKey)
   } catch (err) {
-    console.error(`[nvidia-extract] failed for "${sourceImageName}": ${err instanceof Error ? err.message : err}`)
+    console.error(`[nvidia-extract] API CALL FAILED for "${sourceImageName}": ${err instanceof Error ? err.message : err}`)
     return { accepted: false, rows: [] }
   }
 
@@ -168,6 +169,7 @@ export async function attemptNvidiaExtraction(
     .filter(row => row.detectedName.length > 0)
 
   if (candidateRows.length < MIN_ROWS_TO_TRUST) {
+    console.error(`[nvidia-extract] REJECTED for "${sourceImageName}": only ${candidateRows.length} row(s) parsed (need ${MIN_ROWS_TO_TRUST}+) — escalating to Gemini.`)
     return { accepted: false, rows: [] }
   }
 
@@ -175,9 +177,11 @@ export async function attemptNvidiaExtraction(
     const match = matchCommander(row.detectedName, roster)
     if (match.confidence < NVIDIA_ACCEPT_THRESHOLD) {
       // One weak match is enough to distrust the whole image's read.
+      console.error(`[nvidia-extract] REJECTED for "${sourceImageName}": "${row.detectedName}" only matched roster at ${match.confidence}% (need ${NVIDIA_ACCEPT_THRESHOLD}+) — escalating to Gemini.`)
       return { accepted: false, rows: [] }
     }
   }
 
+  console.log(`[nvidia-extract] ACCEPTED for "${sourceImageName}": ${candidateRows.length} row(s), all matched with high confidence.`)
   return { accepted: true, rows: candidateRows }
 }

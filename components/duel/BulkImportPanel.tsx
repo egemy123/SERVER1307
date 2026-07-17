@@ -37,6 +37,8 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
   const [progressIndex, setProgressIndex] = useState(0)
   const [progressTotal, setProgressTotal] = useState(0)
   const [progressImageName, setProgressImageName] = useState('')
+  const [retrying, setRetrying] = useState(false)
+  const [collectedRawRows, setCollectedRawRows] = useState<any[]>([])
 
   const [rows, setRows]             = useState<ReviewRow[]>([])
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([])
@@ -105,35 +107,32 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     reader.readAsDataURL(file)
   })
 
-  const startProcessing = useCallback(async () => {
-    if (staged.length === 0) return
-    setStage('processing')
-    setProgressIndex(0)
-    setProgressTotal(staged.length)
-    setProcessError('')
-    setFailedImages([])
-
-    const startTime = Date.now()
-    const allRawRows: any[] = []
-    const localFailedImages: { sourceImageId: string; sourceImageName: string; reason: string }[] = []
-    let ocrCount = 0
-    let aiCount = 0
-    let completed = 0
-
-    // Each image is its own small request — no giant batched payload
-    // (fixes "Request Entity Too Large"), and no single long-lived
-    // function processing the whole batch (fixes Vercel timeouts on
-    // 15-20+ image batches). A slow or failed image never takes down
-    // the rest — the loop just moves on. Limited concurrency (2 at a
-    // time) keeps this polite to the OCR/AI backends without being as
-    // fragile as one big request.
+  // Each image is its own small request — no giant batched payload
+  // (fixes "Request Entity Too Large"), and no single long-lived
+  // function processing the whole batch (fixes Vercel timeouts on
+  // 15-20+ image batches). A slow or failed image never takes down
+  // the rest — the loop just moves on. Limited concurrency (2 at a
+  // time) keeps this polite to the NVIDIA/Gemini backends without
+  // being as fragile as one big request.
+  //
+  // Shared by both the initial run and "Retry Failed Images" — the only
+  // difference is which list of StagedImage gets passed in.
+  const processImageBatch = useCallback(async (
+    imagesToProcess: StagedImage[],
+    onImageDone?: (imageName: string, doneCount: number, total: number) => void,
+  ) => {
     const CONCURRENCY = 2
     let cursor = 0
+    let completed = 0
+    const rawRows: any[] = []
+    const newFailedImages: { sourceImageId: string; sourceImageName: string; reason: string }[] = []
+    let ocrCount = 0
+    let aiCount = 0
 
     async function worker() {
-      while (cursor < staged.length) {
+      while (cursor < imagesToProcess.length) {
         const myIndex = cursor++
-        const staged_ = staged[myIndex]
+        const staged_ = imagesToProcess[myIndex]
         const sourceImageId = staged_.id
 
         try {
@@ -152,34 +151,60 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
           const data = await res.json()
 
           if (!res.ok) {
-            localFailedImages.push({
+            newFailedImages.push({
               sourceImageId,
               sourceImageName: staged_.file.name,
               reason: data.error ?? `Server error (${res.status})`,
             })
           } else {
-            allRawRows.push(...(data.rows ?? []))
+            rawRows.push(...(data.rows ?? []))
             if (data.source === 'nvidia') ocrCount++
             else aiCount++
           }
         } catch (err) {
-          localFailedImages.push({
+          newFailedImages.push({
             sourceImageId,
             sourceImageName: staged_.file.name,
             reason: err instanceof Error ? err.message : 'Failed to process image',
           })
         } finally {
           completed++
-          setProgressIndex(completed)
-          setProgressImageName(staged_.file.name)
-          setFailedImages([...localFailedImages])
+          onImageDone?.(staged_.file.name, completed, imagesToProcess.length)
         }
       }
     }
 
+    const workers = Array.from({ length: Math.min(CONCURRENCY, imagesToProcess.length) }, () => worker())
+    await Promise.all(workers)
+
+    return { rawRows, newFailedImages, ocrCount, aiCount }
+  }, [allianceId])
+
+  const startProcessing = useCallback(async () => {
+    if (staged.length === 0) return
+    setStage('processing')
+    setProgressIndex(0)
+    setProgressTotal(staged.length)
+    setProcessError('')
+    setFailedImages([])
+
+    const startTime = Date.now()
+
     try {
-      const workers = Array.from({ length: Math.min(CONCURRENCY, staged.length) }, () => worker())
-      await Promise.all(workers)
+      const { rawRows, newFailedImages, ocrCount, aiCount } = await processImageBatch(
+        staged,
+        (imageName, doneCount) => {
+          setProgressIndex(doneCount)
+          setProgressImageName(imageName)
+          setFailedImages(prev => {
+            // Only meaningful once the batch finishes below, but keeps the
+            // failed list visually live during processing too.
+            return prev
+          })
+        },
+      )
+      setFailedImages(newFailedImages)
+      setCollectedRawRows(rawRows)
 
       // Finalize — matching/dedupe on the aggregated rows. No images in
       // this payload, so it's always small and fast regardless of how
@@ -187,7 +212,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
       const finalizeRes = await fetch('/api/duel/import/finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alliance_id: allianceId, rows: allRawRows }),
+        body: JSON.stringify({ alliance_id: allianceId, rows: rawRows }),
       })
       const finalizeData = await finalizeRes.json()
 
@@ -201,8 +226,8 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
       setDuplicates(finalizeData.duplicates)
       setSummary({
         imagesUploaded:      staged.length,
-        imagesProcessed:     staged.length - localFailedImages.length,
-        imagesFailed:        localFailedImages.length,
+        imagesProcessed:     staged.length - newFailedImages.length,
+        imagesFailed:        newFailedImages.length,
         rowsExtracted:       finalizeData.rowsExtracted,
         uniqueCommanders:    finalizeData.uniqueCommanders,
         duplicateCommanders: finalizeData.duplicateCommanders,
@@ -221,7 +246,75 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
       setProcessError(err instanceof Error ? err.message : 'Import failed')
       setStage('upload')
     }
-  }, [staged, allianceId])
+  }, [staged, allianceId, processImageBatch])
+
+  /**
+   * Retry Failed Images — re-runs extraction for ONLY the screenshots that
+   * failed last time, without re-uploading anything (the original File
+   * objects are still sitting in `staged`). Stays on the Review screen the
+   * whole time (never flips back to the full-page "processing" stage), so
+   * any manual edits already made to rows from the successful images are
+   * never touched.
+   *
+   * Newly-recovered rows are matched/deduped only among themselves (not
+   * re-run against the already-accepted rows), then appended to the
+   * existing review table. This deliberately avoids overwriting anything
+   * already on screen — the tradeoff is that if a retried screenshot
+   * duplicates a commander already listed, you may see two rows for them
+   * and should remove the lower-scoring one manually (same "×" button
+   * already in the table).
+   */
+  const retryFailedImages = useCallback(async () => {
+    if (failedImages.length === 0 || retrying) return
+    setRetrying(true)
+    setProcessError('')
+
+    const imagesToRetry = staged.filter(s => failedImages.some(f => f.sourceImageId === s.id))
+
+    try {
+      const { rawRows, newFailedImages, ocrCount, aiCount } = await processImageBatch(imagesToRetry)
+
+      if (rawRows.length > 0) {
+        const finalizeRes = await fetch('/api/duel/import/finalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alliance_id: allianceId, rows: rawRows }),
+        })
+        const finalizeData = await finalizeRes.json()
+
+        if (finalizeRes.ok) {
+          setRows(prev => [...prev, ...finalizeData.rows])
+          setDuplicates(prev => [...prev, ...finalizeData.duplicates])
+          setCollectedRawRows(prev => [...prev, ...rawRows])
+          setSummary(prev => prev ? {
+            ...prev,
+            imagesProcessed:     prev.imagesProcessed + (imagesToRetry.length - newFailedImages.length),
+            imagesFailed:        newFailedImages.length,
+            rowsExtracted:       prev.rowsExtracted + finalizeData.rowsExtracted,
+            uniqueCommanders:    prev.uniqueCommanders + finalizeData.uniqueCommanders,
+            duplicateCommanders: prev.duplicateCommanders + finalizeData.duplicateCommanders,
+            correctedNames:      prev.correctedNames + finalizeData.correctedNames,
+            reviewRequired:      prev.reviewRequired + finalizeData.reviewRequired,
+            manualRequired:      prev.manualRequired + finalizeData.manualRequired,
+            imagesReadByOcr:    (prev.imagesReadByOcr ?? 0) + ocrCount,
+            imagesReadByAi:     (prev.imagesReadByAi ?? 0) + aiCount,
+          } : prev)
+        } else {
+          setProcessError(finalizeData.error ?? 'Retry finalize failed')
+        }
+      } else {
+        setSummary(prev => prev ? { ...prev, imagesFailed: newFailedImages.length } : prev)
+      }
+
+      // Only the images that STILL failed after retry remain in the list —
+      // anything that succeeded this time drops off.
+      setFailedImages(newFailedImages)
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }, [failedImages, retrying, staged, allianceId, processImageBatch])
 
   // ── Review editing ─────────────────────────────────────────────────────
 
@@ -387,7 +480,17 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
 
               {failedImages.length > 0 && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200">
-                  <p className="text-xs font-semibold text-red-700 mb-1">{failedImages.length} screenshot(s) failed to process:</p>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-xs font-semibold text-red-700">{failedImages.length} screenshot(s) failed to process:</p>
+                    <button
+                      type="button"
+                      onClick={retryFailedImages}
+                      disabled={retrying}
+                      className="shrink-0 rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {retrying ? 'Retrying…' : '↻ Retry Failed Images'}
+                    </button>
+                  </div>
                   {failedImages.map(f => (
                     <p key={f.sourceImageId} className="text-xs text-red-600">{f.sourceImageName} — {f.reason}</p>
                   ))}
