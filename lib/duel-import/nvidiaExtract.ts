@@ -102,9 +102,27 @@ async function callNvidia(image: ExtractImageInput, apiKey: string): Promise<any
 
     if (!text) throw new Error('No text response from NVIDIA vision API')
 
-    const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
-    const parsed = JSON.parse(cleaned)
-    if (!Array.isArray(parsed)) throw new Error('NVIDIA response was not a JSON array')
+    // Llama 3.2 11B Vision doesn't always follow "respond with ONLY JSON"
+    // as strictly as Gemini does — it sometimes prefaces the array with a
+    // sentence like "The image shows a leaderboard with..." before the
+    // actual JSON. Stripping a code fence alone isn't enough for that
+    // case, so pull out the substring between the first "[" and the last
+    // "]" rather than assuming the entire response is already clean JSON.
+    const fenceStripped = text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
+    const arrayStart = fenceStripped.indexOf('[')
+    const arrayEnd = fenceStripped.lastIndexOf(']')
+    const cleaned = (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart)
+      ? fenceStripped.slice(arrayStart, arrayEnd + 1)
+      : fenceStripped
+
+    const parsed = (() => {
+      try {
+        return JSON.parse(cleaned)
+      } catch {
+        throw new Error(`Could not parse NVIDIA response as JSON. Raw output started with: ${text.slice(0, 200)}`)
+      }
+    })()
+    if (!Array.isArray(parsed)) throw new Error(`NVIDIA response was not a JSON array. Raw output started with: ${text.slice(0, 200)}`)
 
     return parsed
   } finally {
