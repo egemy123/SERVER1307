@@ -6,25 +6,22 @@
 //      request body blew past Vercel's request size limit. One image per
 //      request keeps every payload small regardless of batch size.
 //   2. Function timeouts on 15-20 image batches — one long-lived request
-//      running many sequential AI calls could exceed the platform's
+//      running many sequential Gemini calls could exceed the platform's
 //      function duration limit outright. One image per request means
-//      each call only ever does (at most) one NVIDIA pass + one Gemini
-//      call — a few seconds, nowhere near any timeout — and the CLIENT
-//      loops over images itself, so one slow/failed image never takes
-//      down the rest of the batch.
+//      each call only ever does one extraction — a few seconds, nowhere
+//      near any timeout — and the CLIENT loops over images itself, so
+//      one slow/failed image never takes down the rest of the batch.
 //
-// Pipeline per image: try NVIDIA NIM's free meta/llama-3.2-11b-vision-instruct
-// first (no cost, real semantic image understanding — unlike a plain OCR
-// engine, it actually reads stylized game names the way a person would).
-// Only escalate to Gemini if NVIDIA's rows don't ALL clear a strict
-// fuzzy-match bar against the roster — see lib/duel-import/nvidiaExtract.ts
-// for exactly why that bar exists and why it escalates the whole image
-// rather than trying to salvage individual rows.
+// NVIDIA NIM was removed from this pipeline (see git history) — the
+// account's free-tier access was being pulled/rate-limited unpredictably,
+// making it an unreliable foundation to build reliability on top of.
+// Every image now goes straight to Gemini, whose resilience instead comes
+// from rotating across many GEMINI_API_KEY_* keys (see keyManager.ts) —
+// register keys from multiple Google accounts to multiply your effective
+// free-tier quota.
 
-import { NextResponse }             from 'next/server'
-import { requireAuth }              from '@/lib/firebase/serverAuth'
-import { createAdminClient }        from '@/lib/supabase/admin'
-import { attemptNvidiaExtraction }  from '@/lib/duel-import/nvidiaExtract'
+import { NextResponse }        from 'next/server'
+import { requireAuth }         from '@/lib/firebase/serverAuth'
 import { extractRowsFromImage, ExtractionError } from '@/lib/duel-import/extract'
 import { IMPORT_LIMITS } from '@/lib/duel-import/types'
 
@@ -57,26 +54,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `${name} exceeds the 10MB limit` }, { status: 400 })
     }
 
-    const supabase = createAdminClient()
-    const { data: roster } = await supabase
-      .from('commanders')
-      .select('uid, name')
-      .eq('alliance_id', allianceId)
-      .eq('status', 'active')
-
-    // ── Try NVIDIA first — free, real vision-language understanding ──
-    const nvidiaResult = await attemptNvidiaExtraction(sourceImageId, name, base64Data, mediaType, roster ?? [])
-
-    if (nvidiaResult.accepted) {
-      return NextResponse.json({
-        rows: nvidiaResult.rows,
-        source: 'nvidia',
-      })
-    }
-
-    // ── NVIDIA wasn't confident enough — escalate the whole image to Gemini ──
     try {
-      const aiRows = await extractRowsFromImage({
+      const rows = await extractRowsFromImage({
         sourceImageId,
         sourceImageName: name,
         base64Data,
@@ -84,8 +63,8 @@ export async function POST(req: Request) {
       })
 
       return NextResponse.json({
-        rows: aiRows,
-        source: 'ai',
+        rows,
+        source: 'gemini',
       })
     } catch (err) {
       const message = err instanceof ExtractionError

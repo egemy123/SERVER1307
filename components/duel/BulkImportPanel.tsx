@@ -112,8 +112,9 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
   // function processing the whole batch (fixes Vercel timeouts on
   // 15-20+ image batches). A slow or failed image never takes down
   // the rest — the loop just moves on. Limited concurrency (2 at a
-  // time) keeps this polite to the NVIDIA/Gemini backends without
-  // being as fragile as one big request.
+  // time) keeps this polite to Gemini without being as fragile as one
+  // big request — resilience instead comes from rotating across many
+  // GEMINI_API_KEY_* keys server-side (see keyManager.ts).
   //
   // Shared by both the initial run and "Retry Failed Images" — the only
   // difference is which list of StagedImage gets passed in.
@@ -126,8 +127,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     let completed = 0
     const rawRows: any[] = []
     const newFailedImages: { sourceImageId: string; sourceImageName: string; reason: string }[] = []
-    let ocrCount = 0
-    let aiCount = 0
 
     async function worker() {
       while (cursor < imagesToProcess.length) {
@@ -158,8 +157,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
             })
           } else {
             rawRows.push(...(data.rows ?? []))
-            if (data.source === 'nvidia') ocrCount++
-            else aiCount++
           }
         } catch (err) {
           newFailedImages.push({
@@ -177,7 +174,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     const workers = Array.from({ length: Math.min(CONCURRENCY, imagesToProcess.length) }, () => worker())
     await Promise.all(workers)
 
-    return { rawRows, newFailedImages, ocrCount, aiCount }
+    return { rawRows, newFailedImages }
   }, [allianceId])
 
   const startProcessing = useCallback(async () => {
@@ -191,7 +188,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     const startTime = Date.now()
 
     try {
-      const { rawRows, newFailedImages, ocrCount, aiCount } = await processImageBatch(
+      const { rawRows, newFailedImages } = await processImageBatch(
         staged,
         (imageName, doneCount) => {
           setProgressIndex(doneCount)
@@ -236,10 +233,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
         manualRequired:      finalizeData.manualRequired,
         failedRows:          finalizeData.failedRows,
         processingTimeMs:    Date.now() - startTime,
-        // Transparency on the NVIDIA-first savings — how many screenshots
-        // never needed to touch the paid Gemini path at all.
-        imagesReadByOcr:     ocrCount,
-        imagesReadByAi:      aiCount,
       } as ImportSummary)
       setStage('review')
     } catch (err) {
@@ -272,7 +265,7 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
     const imagesToRetry = staged.filter(s => failedImages.some(f => f.sourceImageId === s.id))
 
     try {
-      const { rawRows, newFailedImages, ocrCount, aiCount } = await processImageBatch(imagesToRetry)
+      const { rawRows, newFailedImages } = await processImageBatch(imagesToRetry)
 
       if (rawRows.length > 0) {
         const finalizeRes = await fetch('/api/duel/import/finalize', {
@@ -296,8 +289,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
             correctedNames:      prev.correctedNames + finalizeData.correctedNames,
             reviewRequired:      prev.reviewRequired + finalizeData.reviewRequired,
             manualRequired:      prev.manualRequired + finalizeData.manualRequired,
-            imagesReadByOcr:    (prev.imagesReadByOcr ?? 0) + ocrCount,
-            imagesReadByAi:     (prev.imagesReadByAi ?? 0) + aiCount,
           } : prev)
         } else {
           setProcessError(finalizeData.error ?? 'Retry finalize failed')
@@ -453,12 +444,10 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
             <div className="flex flex-col gap-5">
 
               {/* Summary */}
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {[
                   ['Uploaded',   summary.imagesUploaded],
                   ['Processed',  summary.imagesProcessed],
-                  ['Read by NVIDIA', summary.imagesReadByOcr ?? 0],
-                  ['Read by AI',  summary.imagesReadByAi ?? 0],
                   ['Rows',       summary.rowsExtracted],
                   ['Unique',     summary.uniqueCommanders],
                   ['Duplicates', summary.duplicateCommanders],
@@ -474,9 +463,6 @@ export default function BulkImportPanel({ allianceId, roster, onImport, onClose 
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-tactical-500 -mt-3">
-                {summary.imagesReadByOcr ?? 0} screenshot{(summary.imagesReadByOcr ?? 0) !== 1 ? 's' : ''} read for free by NVIDIA — only {summary.imagesReadByAi ?? 0} needed the Gemini fallback.
-              </p>
 
               {failedImages.length > 0 && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200">

@@ -68,11 +68,6 @@ export interface ImportSummary {
   manualRequired: number
   failedRows: number
   processingTimeMs: number
-  /** How many screenshots were resolved by the free local OCR pass alone
-   *  (never touched the paid AI path). */
-  imagesReadByOcr?: number
-  /** How many screenshots needed AI because OCR wasn't confident enough. */
-  imagesReadByAi?: number
 }
 
 export interface FailedImage {

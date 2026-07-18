@@ -2,24 +2,19 @@
 // SERVER-ONLY. Calls Google's Gemini vision API to read commander
 // name/score pairs off a Last War Dual leaderboard screenshot.
 //
-// This is the FALLBACK path only. NVIDIA-first orchestration lives in
-// app/api/duel/import/extract-image/route.ts, which calls
-// attemptNvidiaExtraction() itself and only calls extractRowsFromImage()
-// (this file) when NVIDIA isn't confident enough. Do NOT call NVIDIA from
-// inside this file too — that would mean every Gemini-fallback image gets
-// NVIDIA called on it TWICE (once by the route, once here), doubling
-// latency and needlessly burning through NVIDIA's free-tier rate limit,
-// which in turn makes MORE images fail NVIDIA's first pass under load.
-// This exact double-call bug happened once already — see git history.
+// This is the ONLY extraction path — NVIDIA NIM was removed (see git
+// history) after its free-tier access proved unreliable to depend on.
+// Resilience instead comes from rotating across every configured
+// GEMINI_API_KEY_* (see keyManager.ts) — register keys from multiple
+// Google accounts to multiply your effective free-tier quota.
 //
-// Resilience: round-robins across every configured GEMINI_API_KEY_* (see
-// keyManager.ts). On a transient error (429 rate limit, 503 overloaded, or
-// a network timeout), retries with the NEXT configured key, with
-// exponential backoff between attempts. Non-transient errors (bad request,
-// invalid key, malformed response) fail immediately without burning
-// retries or other keys' quota. If every configured key is exhausted, this
-// throws a clear ExtractionError — a fresh screenshot just fails and gets
-// reported to the user, same as before; nothing is silently dropped.
+// On a transient error (429 rate limit, 503 overloaded, or a network
+// timeout), retries with the NEXT configured key, with exponential
+// backoff between attempts. Non-transient errors (bad request, invalid
+// key, malformed response) fail immediately without burning retries or
+// other keys' quota. If every configured key is exhausted, this throws a
+// clear ExtractionError — a fresh screenshot just fails and gets reported
+// to the user, same as before; nothing is silently dropped.
 
 import { GoogleGenAI } from '@google/genai'
 import type { RawExtractedRow } from './types'
@@ -29,7 +24,7 @@ import { getKeySequence, getKeyCount, type SelectedKey } from './keyManager'
 // prior migration notes for why this replaced gemini-2.5-flash.
 const MODEL = 'gemini-3.5-flash'
 
-const MAX_KEY_ATTEMPTS_PER_IMAGE = 3 // was 4 — fewer attempts means faster worst-case total time
+const MAX_KEY_ATTEMPTS_PER_IMAGE = 6 // raised from 3 now that Gemini is the only extraction path (NVIDIA removed) — with a 10-key pool, trying only 3 wastes most of the redundancy the extra keys exist for
 const BASE_BACKOFF_MS = 400
 const MAX_BACKOFF_MS = 2500 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
 const REQUEST_TIMEOUT_MS = 20000 // hard cap per API call — a hung request now fails fast instead of blocking a worker slot indefinitely
