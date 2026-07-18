@@ -13,9 +13,9 @@ import type { RosterCommander } from './textMatch'
 // prior migration notes for why this replaced gemini-2.5-flash.
 const MODEL = 'gemini-3.5-flash'
 
-const MAX_KEY_ATTEMPTS_PER_IMAGE = 3 // was 4 — fewer attempts means faster worst-case total time
-const BASE_BACKOFF_MS = 400
-const MAX_BACKOFF_MS = 2500 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
+const MAX_KEY_ATTEMPTS_PER_IMAGE = 4  // was 4 — fewer attempts means faster worst-case total time
+const BASE_BACKOFF_MS = 1000
+const MAX_BACKOFF_MS = 6000 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
 const REQUEST_TIMEOUT_MS = 20000 // hard cap per API call — a hung request now fails fast instead of blocking a worker slot indefinitely
 
 const EXTRACTION_SYSTEM_PROMPT = `You read Last War: Survival "Dual" leaderboard screenshots and extract every row as structured data.

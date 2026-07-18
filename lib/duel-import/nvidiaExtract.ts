@@ -143,7 +143,7 @@ export interface NvidiaAttemptResult {
  * commander. Below this bar, the WHOLE image escalates to Gemini rather
  * than trying to salvage individual rows.
  */
-const NVIDIA_ACCEPT_THRESHOLD = 90
+const NVIDIA_ACCEPT_THRESHOLD = 80
 
 /** An image producing fewer real rows than this is treated as a failed
  *  read (blurry, cropped oddly, model refused, wrong content) and
