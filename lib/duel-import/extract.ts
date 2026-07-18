@@ -1,26 +1,42 @@
 // lib/duel-import/extract.ts
-// SERVER-ONLY. Try cheap/free Nvidia NIM extraction first. If it is bypassed
-// or fails to hit roster confidence, we fallback and round-robin across
-// configured GEMINI_API_KEY_* keys.
+// SERVER-ONLY. Calls Google's Gemini vision API to read commander
+// name/score pairs off a Last War Dual leaderboard screenshot.
+//
+// This is the FALLBACK path only. NVIDIA-first orchestration lives in
+// app/api/duel/import/extract-image/route.ts, which calls
+// attemptNvidiaExtraction() itself and only calls extractRowsFromImage()
+// (this file) when NVIDIA isn't confident enough. Do NOT call NVIDIA from
+// inside this file too — that would mean every Gemini-fallback image gets
+// NVIDIA called on it TWICE (once by the route, once here), doubling
+// latency and needlessly burning through NVIDIA's free-tier rate limit,
+// which in turn makes MORE images fail NVIDIA's first pass under load.
+// This exact double-call bug happened once already — see git history.
+//
+// Resilience: round-robins across every configured GEMINI_API_KEY_* (see
+// keyManager.ts). On a transient error (429 rate limit, 503 overloaded, or
+// a network timeout), retries with the NEXT configured key, with
+// exponential backoff between attempts. Non-transient errors (bad request,
+// invalid key, malformed response) fail immediately without burning
+// retries or other keys' quota. If every configured key is exhausted, this
+// throws a clear ExtractionError — a fresh screenshot just fails and gets
+// reported to the user, same as before; nothing is silently dropped.
 
 import { GoogleGenAI } from '@google/genai'
 import type { RawExtractedRow } from './types'
 import { getKeySequence, getKeyCount, type SelectedKey } from './keyManager'
-import { attemptNvidiaExtraction } from './nvidiaExtract'
-import type { RosterCommander } from './textMatch'
 
 // gemini-3.5-flash: Google's current GA multimodal model. See git history /
 // prior migration notes for why this replaced gemini-2.5-flash.
 const MODEL = 'gemini-3.5-flash'
 
-const MAX_KEY_ATTEMPTS_PER_IMAGE = 4  // was 4 — fewer attempts means faster worst-case total time
-const BASE_BACKOFF_MS = 1000
-const MAX_BACKOFF_MS = 6000 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
+const MAX_KEY_ATTEMPTS_PER_IMAGE = 3 // was 4 — fewer attempts means faster worst-case total time
+const BASE_BACKOFF_MS = 400
+const MAX_BACKOFF_MS = 2500 // was 8000 — a batch of many images can't afford long waits under Vercel Hobby's 60s function limit
 const REQUEST_TIMEOUT_MS = 20000 // hard cap per API call — a hung request now fails fast instead of blocking a worker slot indefinitely
 
 const EXTRACTION_SYSTEM_PROMPT = `You read Last War: Survival "Dual" leaderboard screenshots and extract every row as structured data.
 
-Each row has two fields you need: Commander Name and Dual Score (integer, may contain commas/periods as thousands separators). Ignore any rank/position number shown on the row — it is not needed and must not be included in your output.
+Each row has three fields you need: Rank (the row's position number, an integer), Commander Name, and Dual Score (integer, may contain commas/periods as thousands separators).
 
 CRITICAL — Alliance tags:
 Some rows may show an alliance tag or prefix immediately before the commander's own name — typically in brackets, e.g. "[IMC] Roy", "【7C】Xòm", "(GMG) Serfe". This tag identifies the alliance, not the commander. EXCLUDE it entirely from the name field — return ONLY the commander's own name, with no leading bracket, tag, or alliance identifier of any kind. "[IMC] Roy" must be returned as "Roy", not "[IMC] Roy" and not "IMC Roy".
@@ -31,7 +47,7 @@ Once the alliance tag (if any) is stripped, commander names frequently use styli
 For every row, also return a confidence score from 0-100 reflecting how legible/certain you are about that row's name and score specifically (not the image as a whole). Use lower confidence for: blurry text, partially cut-off rows, ambiguous characters, or low contrast.
 
 Respond with ONLY a JSON array, no other text, no markdown fences. Each element:
-{"name": string, "score": number | null, "confidence": number}
+{"rank": number | null, "name": string, "score": number | null, "confidence": number}
 
 If a screenshot contains no readable leaderboard rows at all, respond with an empty array: []`
 
@@ -125,22 +141,7 @@ async function callGemini(image: ExtractImageInput, selected: SelectedKey) {
 
 export async function extractRowsFromImage(
   image: ExtractImageInput,
-  roster: RosterCommander[],
 ): Promise<RawExtractedRow[]> {
-  // 1. First Pass: Attempt Free/Cheap NVIDIA NIM OCR
-  const nvidiaResult = await attemptNvidiaExtraction(
-    image.sourceImageId,
-    image.sourceImageName,
-    image.base64Data,
-    image.mediaType,
-    roster,
-  )
-
-  if (nvidiaResult.accepted) {
-    return nvidiaResult.rows
-  }
-
-  // 2. Fallback Pass: If NVIDIA results are rejected or fail, escalate to Gemini
   const keyCount = getKeyCount()
   if (keyCount === 0) {
     throw new ExtractionError(
@@ -178,6 +179,7 @@ export async function extractRowsFromImage(
       return parsed.map((row): RawExtractedRow => ({
         sourceImageId:   image.sourceImageId,
         sourceImageName: image.sourceImageName,
+        rank:            typeof row.rank === 'number' ? row.rank : null,
         detectedName:    typeof row.name === 'string' ? row.name : '',
         score:           typeof row.score === 'number' ? row.score : null,
         ocrConfidence:   typeof row.confidence === 'number'
@@ -229,7 +231,6 @@ export async function extractRowsFromImage(
  */
 export async function extractRowsFromImages(
   images: ExtractImageInput[],
-  roster: RosterCommander[],
   onProgress: (completedIndex: number, image: ExtractImageInput) => void,
   onImageFailed: (image: ExtractImageInput, reason: string) => void,
   concurrency = 3,
@@ -243,7 +244,7 @@ export async function extractRowsFromImages(
       const myIndex = cursor++
       const image = images[myIndex]
       try {
-        const rows = await extractRowsFromImage(image, roster)
+        const rows = await extractRowsFromImage(image)
         allRows.push(...rows)
       } catch (err) {
         onImageFailed(image, err instanceof Error ? err.message : 'Unknown extraction error')

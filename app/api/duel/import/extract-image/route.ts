@@ -76,17 +76,13 @@ export async function POST(req: Request) {
 
     // ── NVIDIA wasn't confident enough — escalate the whole image to Gemini ──
     try {
-      // FIX: Added `roster ?? []` as the second argument here
-      const aiRows = await extractRowsFromImage(
-        {
-          sourceImageId,
-          sourceImageName: name,
-          base64Data,
-          mediaType,
-        },
-        roster ?? []
-      )
-      
+      const aiRows = await extractRowsFromImage({
+        sourceImageId,
+        sourceImageName: name,
+        base64Data,
+        mediaType,
+      })
+
       return NextResponse.json({
         rows: aiRows,
         source: 'ai',
