@@ -16,9 +16,11 @@ const supabaseAdmin = createClient(
 const INTERNAL_SECRET = process.env.FCM_INTERNAL_SECRET!
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
+// NOTE: commanderIds are game UIDs (e.g. "1023843483001299"), not UUIDs —
+// alliance_id IS a real uuid column, so that stays .uuid().
 
 const SendSchema = z.object({
-  commanderIds: z.array(z.string().uuid()).optional(),
+  commanderIds: z.array(z.string()).optional(),
   allianceId:   z.string().uuid().optional(),
   notification: z.object({
     title: z.string().max(100),
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
     const { data: rows } = await supabaseAdmin
       .from('commanders')
       .select('fcm_tokens')
-      .in('id', commanderIds)
+      .in('uid', commanderIds)
       .not('fcm_tokens', 'is', null)
     tokens = (rows ?? []).flatMap((r) => r.fcm_tokens ?? [])
   } else if (allianceId) {

@@ -16,6 +16,8 @@ const TokenSchema = z.object({
   token: z.string().min(10).max(512),
 })
 
+const AUTH_LINK_COLUMN = 'linked_google_uid'
+
 // ── Resolve commander from session cookie ─────────────────────────────────────
 async function getCommander(req: NextRequest) {
   const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value
@@ -26,8 +28,8 @@ async function getCommander(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('commanders')
-    .select('id')
-    .eq('firebase_uid', decoded.uid)
+    .select('uid')
+    .eq(AUTH_LINK_COLUMN, decoded.uid)
     .single()
 
   if (error || !data) return null
@@ -43,8 +45,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
 
   const { error } = await supabaseAdmin.rpc('upsert_fcm_token', {
-    p_commander_id: commander.id,
-    p_token:        parsed.data.token,
+    p_commander_uid: commander.uid,
+    p_token:         parsed.data.token,
   })
 
   if (error) {
@@ -64,8 +66,8 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
 
   const { error } = await supabaseAdmin.rpc('remove_fcm_token', {
-    p_commander_id: commander.id,
-    p_token:        parsed.data.token,
+    p_commander_uid: commander.uid,
+    p_token:         parsed.data.token,
   })
 
   if (error) {
