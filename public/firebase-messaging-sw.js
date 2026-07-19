@@ -19,11 +19,11 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey:            'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_API_KEY',
-  authDomain:        'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
-  projectId:         'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-  messagingSenderId: 'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-  appId:             'REPLACE_WITH_NEXT_PUBLIC_FIREBASE_APP_ID',
+  apiKey:            "AIzaSyDEYihGnPnK9x4YL54sIWehY-Qu97-A_U8",
+  authDomain:        "acc-platform.firebaseapp.com",
+  projectId:         "acc-platform-65402",
+  messagingSenderId: "780477334406",
+  appId:             "1:780477334406:web:46301241acfe0119192207",
 });
 
 const messaging = firebase.messaging();
