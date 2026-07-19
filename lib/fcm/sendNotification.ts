@@ -1,20 +1,24 @@
-// lib/fcm/sendNotification.ts
-// ACC #7C — FCM notification sender utility
-// Import from any server action to trigger push notifications
+// src/lib/fcm/sendNotification.ts
+// ACC #7C — FCM notification sender
+// Import and call from any server action to trigger push notifications
 
 import type { FCMSendPayload } from '@/app/api/fcm/send/route';
 
-const APP_URL         = process.env.NEXT_PUBLIC_APP_URL!;
+const APP_URL      = process.env.NEXT_PUBLIC_APP_URL!;
 const INTERNAL_SECRET = process.env.FCM_INTERNAL_SECRET!;
 
-// ─── Core sender ─────────────────────────────────────────────────────────────
-
 export interface SendNotificationResult {
-  sent: number
-  failed: number
+  ok: boolean;
+  sent: number;
+  failed: number;
+  message?: string;
 }
 
-export async function sendNotification(payload: FCMSendPayload): Promise<SendNotificationResult | null> {
+/**
+ * Send a push notification to specific commanders or an entire alliance.
+ * Call this from server actions — never from client components.
+ */
+export async function sendNotification(payload: FCMSendPayload): Promise<SendNotificationResult> {
   try {
     const res = await fetch(`${APP_URL}/api/fcm/send`, {
       method:  'POST',
@@ -24,23 +28,26 @@ export async function sendNotification(payload: FCMSendPayload): Promise<SendNot
       },
       body: JSON.stringify(payload),
     });
+
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      console.error('[FCM] sendNotification failed:', await res.json().catch(() => ({})));
-      return null;
+      console.error('[FCM] sendNotification failed:', data);
+      return { ok: false, sent: 0, failed: 0, message: data?.error ?? 'Send failed' };
     }
-    const data = await res.json().catch(() => null);
-    if (!data) return null;
-    return { sent: data.sent ?? 0, failed: data.failed ?? 0 };
+
+    // data.sent / data.failed come straight from app/api/fcm/send/route.ts
+    return { ok: true, sent: data.sent ?? 0, failed: data.failed ?? 0, message: data.message };
   } catch (err) {
-    // Non-fatal — never crash a server action over a notification
+    // Non-fatal — notification failure should never crash a server action
     console.error('[FCM] sendNotification error:', err);
-    return null;
+    return { ok: false, sent: 0, failed: 0, message: 'Request error' };
   }
 }
 
-// ─── Convenience wrappers ─────────────────────────────────────────────────────
+// ─── Convenience wrappers ────────────────────────────────────────────────────
 
-/** Notify R4/R5 when a member is flagged inactive */
+/** Notify R4/R5 of an alliance when a member is flagged inactive */
 export async function notifyInactiveFlag({
   allianceId,
   memberName,
@@ -48,7 +55,7 @@ export async function notifyInactiveFlag({
   allianceId: string;
   memberName: string;
 }) {
-  await sendNotification({
+  return sendNotification({
     allianceId,
     notification: {
       title: '⚠️ Inactive Member',
@@ -63,19 +70,19 @@ export async function notifyInactiveFlag({
   });
 }
 
-/** Notify commanders about a transfer request */
+/** Notify a commander about a transfer request */
 export async function notifyTransferRequest({
   commanderIds,
   requesterName,
   allianceId,
   transferId,
 }: {
-  commanderIds:  string[];
+  commanderIds: string[];
   requesterName: string;
-  allianceId:    string;
-  transferId:    string;
+  allianceId:   string;
+  transferId:   string;
 }) {
-  await sendNotification({
+  return sendNotification({
     commanderIds,
     notification: {
       title: '🔄 Transfer Request',
@@ -91,7 +98,7 @@ export async function notifyTransferRequest({
   });
 }
 
-/** Notify alliance when DSB/Canyon event state changes */
+/** Notify all alliance members about a DSB/Canyon event state change */
 export async function notifyEventUpdate({
   allianceId,
   eventName,
@@ -110,7 +117,7 @@ export async function notifyEventUpdate({
     completed:         '✅ Event complete',
   };
 
-  await sendNotification({
+  return sendNotification({
     allianceId,
     notification: {
       title: eventName,
