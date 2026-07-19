@@ -7,11 +7,18 @@ import type { FCMSendPayload } from '@/app/api/fcm/send/route';
 const APP_URL      = process.env.NEXT_PUBLIC_APP_URL!;
 const INTERNAL_SECRET = process.env.FCM_INTERNAL_SECRET!;
 
+export interface SendNotificationResult {
+  ok: boolean;
+  sent: number;
+  failed: number;
+  message?: string;
+}
+
 /**
  * Send a push notification to specific commanders or an entire alliance.
  * Call this from server actions — never from client components.
  */
-export async function sendNotification(payload: FCMSendPayload): Promise<void> {
+export async function sendNotification(payload: FCMSendPayload): Promise<SendNotificationResult> {
   try {
     const res = await fetch(`${APP_URL}/api/fcm/send`, {
       method:  'POST',
@@ -22,13 +29,19 @@ export async function sendNotification(payload: FCMSendPayload): Promise<void> {
       body: JSON.stringify(payload),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('[FCM] sendNotification failed:', err);
+      console.error('[FCM] sendNotification failed:', data);
+      return { ok: false, sent: 0, failed: 0, message: data?.error ?? 'Send failed' };
     }
+
+    // data.sent / data.failed come straight from app/api/fcm/send/route.ts
+    return { ok: true, sent: data.sent ?? 0, failed: data.failed ?? 0, message: data.message };
   } catch (err) {
     // Non-fatal — notification failure should never crash a server action
     console.error('[FCM] sendNotification error:', err);
+    return { ok: false, sent: 0, failed: 0, message: 'Request error' };
   }
 }
 
@@ -42,7 +55,7 @@ export async function notifyInactiveFlag({
   allianceId: string;
   memberName: string;
 }) {
-  await sendNotification({
+  return sendNotification({
     allianceId,
     notification: {
       title: '⚠️ Inactive Member',
@@ -69,7 +82,7 @@ export async function notifyTransferRequest({
   allianceId:   string;
   transferId:   string;
 }) {
-  await sendNotification({
+  return sendNotification({
     commanderIds,
     notification: {
       title: '🔄 Transfer Request',
@@ -104,7 +117,7 @@ export async function notifyEventUpdate({
     completed:         '✅ Event complete',
   };
 
-  await sendNotification({
+  return sendNotification({
     allianceId,
     notification: {
       title: eventName,
