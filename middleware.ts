@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 const SESSION_COOKIE = '__acc_session'
 
 const PUBLIC_ROUTES   = ['/', '/login', '/register']
-const PUBLIC_PREFIXES = ['/verify', '/api/auth', '/_next', '/favicon', '/api/verify']
+const PUBLIC_PREFIXES = ['/verify', '/api/auth', '/_next', '/favicon', '/api/verify', '/api/fcm/send']
 
 // Routes only supreme can access
 const SUPREME_ONLY = ['/admin']
