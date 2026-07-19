@@ -9,14 +9,15 @@ import { DUEL_DAY_NAMES, DUEL_POINT_VALUES, pointsForDay } from '@/lib/types'
 
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday'] as const
 
-// Failure-count warning levels for analytics.
-// ASSUMPTION: a "failure" = Below Minimum OR Absent (combined single count),
-// matching the single "Failed Count" column in the reference design.
-const WARNING_LEVEL = (failures: number) => {
-  if (failures >= 5) return { label: 'Red',    color: 'text-red-600',    bg: 'bg-red-50 border-red-200' }
-  if (failures >= 3) return { label: 'Orange', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' }
-  if (failures >= 1) return { label: 'Yellow', color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200' }
-  return                     { label: 'Green',  color: 'text-accent-deep', bg: 'bg-accent-light border-accent/20' }
+// Analytics warning levels are based on TOTAL participation issues
+// (absent + below-minimum combined) for a quick at-a-glance risk read —
+// but the two counts are always displayed separately, never blended into
+// one number, per explicit requirement.
+const WARNING_LEVEL = (total: number) => {
+  if (total >= 5) return { label: 'Red',    color: 'text-red-600',    bg: 'bg-red-50 border-red-200' }
+  if (total >= 3) return { label: 'Orange', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' }
+  if (total >= 1) return { label: 'Yellow', color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200' }
+  return                   { label: 'Green',  color: 'text-accent-deep', bg: 'bg-accent-light border-accent/20' }
 }
 
 export default async function DuelPage({
@@ -101,6 +102,10 @@ export default async function DuelPage({
     return { ...member, dayResults: dayResultsForMember, passed, absent, below, rawScoreTotal }
   })
 
+  // Ranked by score descending — highest score first. Ties broken by name
+  // so ordering stays stable rather than shuffling on every reload.
+  memberRowsAll.sort((a, b) => b.rawScoreTotal - a.rawScoreTotal || a.name.localeCompare(b.name))
+
   // ── Visibility: normal members only see their own row; leadership sees everyone ──
   const memberRows = isR4Plus
     ? memberRowsAll
@@ -113,22 +118,53 @@ export default async function DuelPage({
     ? [...memberRowsAll].sort((a, b) => b.rawScoreTotal - a.rawScoreTotal)
     : []
 
-  // ── Analytics: cumulative failure counts across ALL historical weeks ──
-  // Failure = Below Minimum OR Absent (see WARNING_LEVEL assumption above).
+  // ── Past Seasons — per-week leaderboards for the expandable history list ──
+  const membersByUid = new Map((members ?? []).map(m => [m.uid, m.name]))
+  const otherPastWeeks = (pastWeeks ?? []).filter(w => w.week_key !== weekKey)
+  const pastWeekIds = otherPastWeeks.map(w => w.id)
+
+  const { data: pastEntries } = pastWeekIds.length > 0
+    ? await supabase
+        .from('duel_entries')
+        .select('duel_week_id, commander_uid, score, day_locked')
+        .in('duel_week_id', pastWeekIds)
+    : { data: [] as any[] }
+
+  const pastSeasonLeaderboards = otherPastWeeks.map(week => {
+    const weekEntries = (pastEntries ?? []).filter(e => e.duel_week_id === week.id)
+    const totalsByUid = new Map<string, number>()
+    for (const entry of weekEntries) {
+      if (!entry.day_locked || typeof entry.score !== 'number') continue
+      totalsByUid.set(entry.commander_uid, (totalsByUid.get(entry.commander_uid) ?? 0) + entry.score)
+    }
+    const ranked = Array.from(totalsByUid.entries())
+      .map(([uid, score]) => ({ uid, name: membersByUid.get(uid) ?? uid, score }))
+      .sort((a, b) => b.score - a.score)
+    return { weekKey: week.week_key, mode: week.mode, ranked }
+  })
+
+  // ── Analytics: cumulative absent vs below-minimum counts across ALL
+  // historical weeks — tracked SEPARATELY, never combined into one number.
   const { data: allEntries } = await supabase
     .from('duel_entries')
     .select('commander_uid, status, day, duel_week_id, duel_weeks!inner(alliance_id, week_key)')
     .eq('duel_weeks.alliance_id', allianceId)
     .in('status', ['below_minimum', 'absent'])
 
-  const failureCountByUid = new Map<string, number>()
+  const absentCountByUid  = new Map<string, number>()
+  const belowMinCountByUid = new Map<string, number>()
   for (const row of (allEntries ?? [])) {
-    failureCountByUid.set(row.commander_uid, (failureCountByUid.get(row.commander_uid) ?? 0) + 1)
+    const target = row.status === 'absent' ? absentCountByUid : belowMinCountByUid
+    target.set(row.commander_uid, (target.get(row.commander_uid) ?? 0) + 1)
   }
 
   const analyticsRowsAll = (members ?? [])
-    .map(m => ({ uid: m.uid, name: m.name, failures: failureCountByUid.get(m.uid) ?? 0 }))
-    .sort((a, b) => b.failures - a.failures)
+    .map(m => {
+      const absent = absentCountByUid.get(m.uid) ?? 0
+      const belowMin = belowMinCountByUid.get(m.uid) ?? 0
+      return { uid: m.uid, name: m.name, absent, belowMin, total: absent + belowMin }
+    })
+    .sort((a, b) => b.total - a.total)
 
   const analyticsRows = isR4Plus
     ? analyticsRowsAll
@@ -276,26 +312,75 @@ export default async function DuelPage({
             </div>
           )}
 
-          {/* Detailed Mode leaderboard — raw score sum, ranked, leadership only */}
-          {isR4Plus && duelWeek.mode === 'full' && leaderboard.length > 0 && (
+          {/* Detailed Mode leaderboard — raw score sum, ranked, leadership only,
+              plus expandable past-season leaderboards below it */}
+          {isR4Plus && (leaderboard.length > 0 || pastSeasonLeaderboards.length > 0) && (
             <div className="glass-card p-5">
               <div className="flex items-center justify-between mb-4">
-                <p className="font-semibold text-tactical-900">Leaderboard — {weekKey}</p>
+                <p className="font-semibold text-tactical-900">Leaderboard</p>
                 <p className="text-xs text-tactical-500">Ranked by raw 6-day score total</p>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                {leaderboard.slice(0, 20).map((m, i) => (
-                  <div key={m.uid} className="flex items-center justify-between p-2 rounded-lg bg-surface-overlay">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-mono text-tactical-400 shrink-0">#{i + 1}</span>
-                      <span className="text-xs font-medium text-tactical-900 truncate">{m.name}</span>
-                    </div>
-                    <span className="text-xs font-bold font-mono text-tactical-900 shrink-0">
-                      {m.rawScoreTotal.toLocaleString()}
-                    </span>
+
+              {duelWeek?.mode === 'full' && leaderboard.length > 0 && (
+                <>
+                  <p className="text-xs font-medium text-tactical-500 uppercase tracking-wide mb-2">
+                    {weekKey} — Current
+                  </p>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-5">
+                    {leaderboard.slice(0, 20).map((m, i) => (
+                      <div key={m.uid} className="flex items-center justify-between p-2 rounded-lg bg-surface-overlay">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-mono text-tactical-400 shrink-0">#{i + 1}</span>
+                          <span className="text-xs font-medium text-tactical-900 truncate">{m.name}</span>
+                        </div>
+                        <span className="text-xs font-bold font-mono text-tactical-900 shrink-0">
+                          {m.rawScoreTotal.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              )}
+
+              {pastSeasonLeaderboards.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium text-tactical-500 uppercase tracking-wide">Past Seasons</p>
+                  {pastSeasonLeaderboards.map(season => (
+                    <details key={season.weekKey} className="group rounded-xl border border-tactical-200 overflow-hidden">
+                      <summary className="cursor-pointer select-none list-none px-3 py-2.5 text-sm font-medium text-tactical-900 bg-surface-overlay flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block transition-transform group-open:rotate-90 text-tactical-400">▶</span>
+                          {season.weekKey}
+                        </span>
+                        <span className="badge badge-inactive capitalize text-xs">
+                          {season.mode === 'full' ? 'Detailed' : 'Simple'}
+                        </span>
+                      </summary>
+                      <div className="p-3 border-t border-tactical-100">
+                        {season.mode !== 'full' ? (
+                          <p className="text-xs text-tactical-500">Simple mode — no numeric scores tracked this week.</p>
+                        ) : season.ranked.length === 0 ? (
+                          <p className="text-xs text-tactical-500">No scores recorded.</p>
+                        ) : (
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                            {season.ranked.slice(0, 20).map((m, i) => (
+                              <div key={m.uid} className="flex items-center justify-between p-2 rounded-lg bg-surface-overlay">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-mono text-tactical-400 shrink-0">#{i + 1}</span>
+                                  <span className="text-xs font-medium text-tactical-900 truncate">{m.name}</span>
+                                </div>
+                                <span className="text-xs font-bold font-mono text-tactical-900 shrink-0">
+                                  {m.score.toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -309,22 +394,28 @@ export default async function DuelPage({
         </div>
       )}
 
-      {/* Analytics — cumulative failure history (own row for members, all for leadership) */}
+      {/* Analytics — cumulative absent vs below-minimum history (own row for members, all for leadership) */}
       {analyticsRows.length > 0 && (
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
             <p className="font-semibold text-tactical-900">
               {isR4Plus ? 'Participation Analytics — All Time' : 'Your Participation History'}
             </p>
-            <p className="text-xs text-tactical-500">Below-minimum + absent, all recorded weeks</p>
+            <p className="text-xs text-tactical-500">Absent and Below-Minimum tracked separately, all recorded weeks</p>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {analyticsRows.map(r => {
-              const level = WARNING_LEVEL(r.failures)
+              const level = WARNING_LEVEL(r.total)
               return (
-                <div key={r.uid} className={`p-2.5 rounded-xl border ${level.bg} flex items-center justify-between gap-2`}>
-                  <span className="text-xs font-medium text-tactical-900 truncate">{r.name}</span>
-                  <span className={`text-sm font-bold font-mono shrink-0 ${level.color}`}>{r.failures}</span>
+                <div key={r.uid} className={`p-2.5 rounded-xl border ${level.bg} flex flex-col gap-1.5`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-tactical-900 truncate">{r.name}</span>
+                    <span className={`text-sm font-bold font-mono shrink-0 ${level.color}`}>{r.total}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className="text-red-500 font-medium">✗ Absent: {r.absent}</span>
+                    <span className="text-amber-600 font-medium">⚠ Below Min: {r.belowMin}</span>
+                  </div>
                 </div>
               )
             })}
