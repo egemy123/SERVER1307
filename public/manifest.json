@@ -1,6 +1,6 @@
 {
-  "name": "ACC #7C — Alliance Command Center",
-  "short_name": "ACC #7C",
+  "name": "#1307 ACC — Alliance Command Center",
+  "short_name": "#1307 ACC",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
@@ -14,7 +14,7 @@
     },
     {
       "src": "/icon-512.png",
-      "sizes": "513x512",
+      "sizes": "512x512",
       "type": "image/png"
     }
   ]
