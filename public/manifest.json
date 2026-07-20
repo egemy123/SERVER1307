@@ -1,8 +1,8 @@
 {
   "id": "/",
   "name": "#1307C — Alliance Command Center",
-  "short_name": "1307C",
-  "description": "Official Alliance Command Center for Server #1307. Manage members, alerts, events, rankings, attendance, and alliance operations from one place.",
+  "short_name": "#1307 ACC",
+  "description": "Official Alliance Command Center for Server #1307. Manage members, alerts, events, attendance, and alliance operations from one place.",
 
   "start_url": "/dashboard",
   "scope": "/",
@@ -40,23 +40,18 @@
   "shortcuts": [
     {
       "name": "Dashboard",
-      "url": "/dashboard",
+      "url": "https://server-1307.vercel.app/dashboard",
       "description": "Open the main dashboard"
     },
     {
       "name": "Alliance",
-      "url": "/alliance",
+      "url": "https://server-1307.vercel.app/alliance/3c045b3c-a4ad-4604-969f-e8920e9009ac",
       "description": "Alliance overview"
     },
     {
       "name": "Members",
-      "url": "/members",
+      "url": "https://server-1307.vercel.app/alliance/3c045b3c-a4ad-4604-969f-e8920e9009ac/members",
       "description": "View alliance members"
-    },
-    {
-      "name": "Notifications",
-      "url": "/notifications",
-      "description": "Open notifications"
     }
   ]
 }
