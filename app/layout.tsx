@@ -5,6 +5,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: '1307 ACC #7C — Alliance Command Center',
   description: 'Tactical alliance operations platform for Last War: Survival',
+  manifest: '/manifest.json',
 }
 
 export default function RootLayout({
