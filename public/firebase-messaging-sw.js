@@ -38,9 +38,7 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [200, 100, 200],
+    icon: '/next.svg', // swap for a real app icon if you have one
     data: { url },
     tag:  payload.data?.tag ?? undefined,
   });
