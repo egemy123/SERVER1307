@@ -10,14 +10,11 @@
 // it's capped at 80 characters server-side, not just in the UI.
 
 export type AlertPresetKey =
-  | 'rally_now'
   | 'desert_storm'
   | 'marshal_guard'
-  | 'winter_storm'
   | 'capitol_war'
-  | 'alliance_meeting'
   | 'emergency'
-  | 'afk_check'
+  | 'dig_drone'
   | 'custom'
 
 export interface AlertPreset {
@@ -31,13 +28,6 @@ export interface AlertPreset {
 }
 
 export const ALERT_PRESETS: AlertPreset[] = [
-  {
-    key: 'rally_now',
-    icon: '🚨',
-    title: 'Rally Now',
-    description: 'Call everyone to rally immediately',
-    notificationBody: 'Everyone rally immediately!',
-  },
   {
     key: 'desert_storm',
     icon: '⚔️',
@@ -53,25 +43,11 @@ export const ALERT_PRESETS: AlertPreset[] = [
     notificationBody: 'Marshal Guard is starting — get ready!',
   },
   {
-    key: 'winter_storm',
-    icon: '❄️',
-    title: 'Winter Storm',
-    description: 'Winter Storm event notice',
-    notificationBody: 'Winter Storm is starting — get ready!',
-  },
-  {
     key: 'capitol_war',
     icon: '🏰',
     title: 'Capitol War',
     description: 'Prepare for Capitol battle',
     notificationBody: 'Prepare for Capitol battle!',
-  },
-  {
-    key: 'alliance_meeting',
-    icon: '📢',
-    title: 'Alliance Meeting',
-    description: 'Call members to a meeting',
-    notificationBody: 'Alliance meeting — join voice chat now.',
   },
   {
     key: 'emergency',
@@ -81,11 +57,11 @@ export const ALERT_PRESETS: AlertPreset[] = [
     notificationBody: 'Emergency — check the alliance immediately.',
   },
   {
-    key: 'afk_check',
-    icon: '💤',
-    title: 'AFK Check',
-    description: 'Check who is active right now',
-    notificationBody: 'AFK check — respond now if you\'re active.',
+    key: 'dig_drone',
+    icon: '🚁',
+    title: 'Dig/Drone',
+    description: 'Dig or drone event notice',
+    notificationBody: 'Dig/Drone event — get ready!',
   },
   {
     key: 'custom',

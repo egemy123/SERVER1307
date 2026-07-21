@@ -158,15 +158,16 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
             <AlertGrid selected={selected} disabled={!ready} onSelect={setSelected} />
 
             {selected === 'custom' && (
-              <CustomAlertDialog
-                title={customTitle}
-                message={customMessage}
-                onTitleChange={setCustomTitle}
-                onMessageChange={setCustomMessage}
-              />
+              <>
+                <CustomAlertDialog
+                  title={customTitle}
+                  message={customMessage}
+                  onTitleChange={setCustomTitle}
+                  onMessageChange={setCustomMessage}
+                />
+                <NotificationPreview title={preview.title} body={preview.body} />
+              </>
             )}
-
-            <NotificationPreview title={preview.title} body={preview.body} />
 
             <SendAlertButton
               ready={ready}
