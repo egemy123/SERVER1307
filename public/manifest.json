@@ -1,13 +1,14 @@
 {
   "id": "/",
-  "name": "#1307C — Alliance Command Center",
-  "short_name": "#1307 ACC",
+  "name": "IMc-IRONWING MONARCH",
+  "short_name": "IMc",
   "description": "Official Alliance Command Center for Server #1307. Manage members, alerts, events, attendance, and alliance operations from one place.",
 
   "start_url": "/dashboard",
   "scope": "/",
 
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait",
 
   "theme_color": "#22C55E",
