@@ -1,7 +1,7 @@
 {
   "id": "/",
   "name": "IMcIRONWING MONARCH",
-  "short_name": "IMc",
+  "short_name": "# IMc",
   "description": "Official Alliance Command Center for Server #1307. Manage members, alerts, events, attendance, and alliance operations from one place.",
 
   "start_url": "/dashboard",
