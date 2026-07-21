@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "IMc-IRONWING MONARCH",
+  "name": "IMcIRONWING MONARCH",
   "short_name": "IMc",
   "description": "Official Alliance Command Center for Server #1307. Manage members, alerts, events, attendance, and alliance operations from one place.",
 
@@ -34,7 +34,7 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any "
     }
   ],
 
