@@ -106,3 +106,53 @@ export function getClockDisplay(date: Date = new Date()): {
 export function isSameWeekUTC2(a: Date, b: Date): boolean {
   return getWeekKey(a) === getWeekKey(b)
 }
+
+// ── Season labeling ──────────────────────────────────────────
+// "S-34 W4" style: a Season is 4 consecutive Duel weeks. The season
+// number increments every 4 weeks; the week-in-season cycles 1-4.
+//
+// ANCHOR (the one fact this whole scheme is built on): the Duel week
+// starting Monday 2026-07-13 (i.e. week_key "2026-W29") is Season 34,
+// Week 4. Every other week's season/week is computed from this single
+// anchor via calendar-day arithmetic — NOT from ISO week-of-year numbers
+// directly, since those reset every January and would break the season
+// count across a year boundary.
+//
+// If this anchor is ever wrong by so much as one week, every season
+// label from that point on shifts by the same amount — it was set from
+// what was confirmed to be "the current week" in conversation, not
+// independently re-derived, so please double-check S34 W4 against
+// week_key "2026-W29" specifically before relying on this in production.
+const SEASON_ANCHOR_MONDAY = Date.UTC(2026, 6, 13) // 2026-07-13, month is 0-indexed
+const SEASON_ANCHOR_SEASON = 34
+const SEASON_ANCHOR_WEEK_IN_SEASON = 4 // 1-indexed
+const WEEKS_PER_SEASON = 4
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
+
+/** Floor-division and true modulo that behave correctly for negative inputs
+ *  (JS's built-in `%` returns a negative remainder for negative operands,
+ *  which would make weeks before the anchor compute wrong). */
+function floorDiv(a: number, b: number): number {
+  return Math.floor(a / b)
+}
+function trueMod(a: number, b: number): number {
+  return ((a % b) + b) % b
+}
+
+/**
+ * Converts a duel week's week_start (ISO string, always a Monday) into
+ * "S-34 W4" display format.
+ */
+export function getSeasonLabel(weekStartIso: string): string {
+  const weekStart = new Date(weekStartIso).getTime()
+  const weeksSinceAnchor = Math.round((weekStart - SEASON_ANCHOR_MONDAY) / MS_PER_WEEK)
+
+  // Shift so index 0 = Week 1 of the anchor's season, regardless of which
+  // week-in-season the anchor itself happens to be.
+  const cumulativeIndex = weeksSinceAnchor + (SEASON_ANCHOR_WEEK_IN_SEASON - 1)
+
+  const season       = SEASON_ANCHOR_SEASON + floorDiv(cumulativeIndex, WEEKS_PER_SEASON)
+  const weekInSeason = trueMod(cumulativeIndex, WEEKS_PER_SEASON) + 1
+
+  return `S-${season} W${weekInSeason}`
+}
