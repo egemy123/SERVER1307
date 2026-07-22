@@ -9,6 +9,7 @@ import DuelPerformanceChart  from '@/components/dashboard/DuelPerformanceChart'
 import InactiveReport        from '@/components/dashboard/InactiveReport'
 import WeeklySummaryTable    from '@/components/dashboard/WeeklySummaryTable'
 import TopContributors       from '@/components/dashboard/TopContributors'
+import CommanderCompare      from '@/components/dashboard/CommanderCompare'
 
 export default async function AnalyticsPage({
   params,
@@ -192,6 +193,74 @@ export default async function AnalyticsPage({
     }
   })
 
+  // ── Commander comparison (spec-sheet) — last 4 tracked weeks only ────────
+  // weekList/dsbList/canyonList are already ordered newest-first, limit 8 —
+  // just take the first 4 instead of a separate query.
+  const last4Weeks    = weekList.slice(0, 4)
+  const last4WeekIds  = new Set(last4Weeks.map(w => w.id))
+  const last4Entries  = entryList.filter(e => last4WeekIds.has(e.duel_week_id))
+
+  const last4Dsb    = dsbList.slice(0, 4)
+  const last4DsbIds = new Set(last4Dsb.map(e => e.id))
+  const last4DsbAtt = dsbAtt.filter(a => last4DsbIds.has(a.event_id))
+
+  const last4Canyon    = canyonList.slice(0, 4)
+  const last4CanyonIds = new Set(last4Canyon.map(e => e.id))
+  const last4CanyonAtt = canyonAtt.filter(a => last4CanyonIds.has(a.event_id))
+
+  const comparisonStats: Record<string, {
+    duelParticipationPct: number | null
+    duelAvgScore:         number | null
+    dsbPct:               number | null
+    canyonPct:            number | null
+    inactiveFlagged:      boolean
+    inactiveSince:        string | null
+  }> = {}
+
+  for (const m of memberList) {
+    const entries   = last4Entries.filter(e => e.commander_uid === m.uid)
+    // "skipped" (excused) is excluded from the denominator entirely — it's
+    // neither a positive nor negative signal, matching how excused absences
+    // are treated everywhere else in this codebase.
+    const eligible  = entries.filter(e => e.status !== 'skipped')
+    const submitted = entries.filter(e => e.status === 'passed' || e.status === 'below_minimum')
+    const duelParticipationPct = eligible.length > 0
+      ? Math.round((submitted.length / eligible.length) * 100)
+      : null
+
+    const scores = submitted
+      .map(e => e.score)
+      .filter((s): s is number => typeof s === 'number' && s > 0)
+    const duelAvgScore = scores.length > 0
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : null
+
+    // DSB/Canyon credit: attended = full, late = half, everything else = 0.
+    const dsbRecords = last4DsbAtt.filter(a => a.commander_uid === m.uid)
+    const dsbCredit  = dsbRecords.reduce((sum, a) =>
+      sum + (a.status === 'attended' ? 1 : a.status === 'late' ? 0.5 : 0), 0)
+    const dsbPct = dsbRecords.length > 0
+      ? Math.round((dsbCredit / dsbRecords.length) * 100)
+      : null
+
+    const canyonRecords = last4CanyonAtt.filter(a => a.commander_uid === m.uid)
+    const canyonCredit  = canyonRecords.reduce((sum, a) =>
+      sum + (a.status === 'attended' ? 1 : a.status === 'late' ? 0.5 : 0), 0)
+    const canyonPct = canyonRecords.length > 0
+      ? Math.round((canyonCredit / canyonRecords.length) * 100)
+      : null
+
+    comparisonStats[m.uid] = {
+      duelParticipationPct,
+      duelAvgScore,
+      dsbPct,
+      canyonPct,
+      inactiveFlagged: m.inactive_flagged ?? false,
+      inactiveSince:   m.inactive_flagged_at ?? null,
+    }
+  }
+
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
 
@@ -247,6 +316,12 @@ export default async function AnalyticsPage({
         <TopContributors data={topContributors} />
         <InactiveReport members={inactiveList} allianceId={allianceId} />
       </div>
+
+      {/* Commander Comparison — spec-sheet style, last 4 weeks */}
+      <CommanderCompare
+        members={memberList.map(m => ({ uid: m.uid, name: m.name, role: m.role, status: m.status }))}
+        stats={comparisonStats}
+      />
 
       {/* Weekly Summary Table */}
       <WeeklySummaryTable data={weeklySummary} />
