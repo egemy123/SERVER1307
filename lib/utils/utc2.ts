@@ -112,7 +112,7 @@ export function isSameWeekUTC2(a: Date, b: Date): boolean {
 // number increments every 4 weeks; the week-in-season cycles 1-4.
 //
 // ANCHOR (the one fact this whole scheme is built on): the Duel week
-// starting Monday 2026-07-13 (i.e. week_key "2026-W29") is Season 34,
+// starting Monday 2026-07-20 (i.e. week_key "2026-W30") is Season 34,
 // Week 4. Every other week's season/week is computed from this single
 // anchor via calendar-day arithmetic — NOT from ISO week-of-year numbers
 // directly, since those reset every January and would break the season
@@ -120,10 +120,12 @@ export function isSameWeekUTC2(a: Date, b: Date): boolean {
 //
 // If this anchor is ever wrong by so much as one week, every season
 // label from that point on shifts by the same amount — it was set from
-// what was confirmed to be "the current week" in conversation, not
-// independently re-derived, so please double-check S34 W4 against
-// week_key "2026-W29" specifically before relying on this in production.
-const SEASON_ANCHOR_MONDAY = Date.UTC(2026, 6, 13) // 2026-07-13, month is 0-indexed
+// what was confirmed to be "the current week" in conversation (corrected
+// once already — an earlier version of this anchor used 2026-W29, which
+// was wrong by exactly one week), not independently re-derived, so please
+// double-check S-34 W4 against week_key "2026-W30" specifically before
+// relying on this in production.
+const SEASON_ANCHOR_MONDAY = Date.UTC(2026, 6, 20) // 2026-07-20, month is 0-indexed
 const SEASON_ANCHOR_SEASON = 34
 const SEASON_ANCHOR_WEEK_IN_SEASON = 4 // 1-indexed
 const WEEKS_PER_SEASON = 4
