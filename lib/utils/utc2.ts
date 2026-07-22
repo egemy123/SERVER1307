@@ -156,3 +156,15 @@ export function getSeasonLabel(weekStartIso: string): string {
 
   return `S-${season} W${weekInSeason}`
 }
+
+/**
+ * Convenience wrapper for anywhere in the app that needs "what season/week
+ * is it right now" WITHOUT having an actual duel_weeks row to read
+ * week_start from (e.g. the dashboard header, which shows the current
+ * calendar week regardless of whether a Duel week has been started yet).
+ * Internally just finds the Monday of the given date's week and feeds it
+ * through the same getSeasonLabel() anchor math above — never duplicated.
+ */
+export function getCurrentSeasonLabel(date: Date = new Date()): string {
+  return getSeasonLabel(getWeekStart(date).toISOString())
+}

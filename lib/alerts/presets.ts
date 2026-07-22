@@ -77,3 +77,8 @@ export const ALERT_PRESET_MAP: Record<AlertPresetKey, AlertPreset> =
 
 export const ALERT_COOLDOWN_SECONDS = 60
 export const CUSTOM_MESSAGE_MAX_LENGTH = 80
+
+// Daily send quota — r1/r2/r3 are capped, r4/r5/supreme are unlimited.
+// Resets at midnight UTC-2 (see getDayStartUTC2 in lib/utils/utc2.ts).
+export const DAILY_ALERT_QUOTA = 10
+export const QUOTA_EXEMPT_ROLES = ['r4', 'r5', 'supreme'] as const

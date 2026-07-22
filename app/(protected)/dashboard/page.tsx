@@ -6,7 +6,7 @@ import UTCClock from '@/components/layout/UTCClock'
 import AllianceOverviewCard from '@/components/dashboard/AllianceOverviewCard'
 import AllianceTargetsCard from '@/components/dashboard/AllianceTargetsCard'
 import AllianceAlertWidget from '@/components/dashboard/AllianceAlertWidget'
-import { getWeekKey } from '@/lib/utils/utc2'
+import { getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import type { Role } from '@/lib/types'
 
 export default async function DashboardPage() {
@@ -22,8 +22,7 @@ export default async function DashboardPage() {
 
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const supabase = createAdminClient()
-  const weekKey = getWeekKey()
-  const weekLabel = weekKey.split('-')[1] // e.g. "W27"
+  const weekLabel = getCurrentSeasonLabel() // e.g. "S-35 W1" — was raw ISO "W30"
 
   const [
     { data: commander },
@@ -136,7 +135,7 @@ export default async function DashboardPage() {
         </h1>
 
         <p className="page-subtitle">
-          {weekKey} · {role?.toUpperCase()} ·{' '}
+          {weekLabel} · {role?.toUpperCase()} ·{' '}
           {allianceId ? 'Alliance active' : 'No alliance assigned'}
         </p>
       </div>
