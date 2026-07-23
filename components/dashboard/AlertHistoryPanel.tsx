@@ -1,11 +1,10 @@
 'use client'
 // components/dashboard/AlertHistoryPanel.tsx
-// Compact "who sent what alert, when" monitor — sits right under the Send
-// Alert widget so R4/R5 can spot misuse at a glance without digging through
-// the full audit log page.
+// Compact single-line bar — click to open the full "who sent what, when"
+// history in a modal, instead of taking up permanent dashboard space.
 
 import { useEffect, useState } from 'react'
-import { History } from 'lucide-react'
+import { History, X } from 'lucide-react'
 import { relativeTime } from '@/lib/utils/utc2'
 
 interface HistoryEntry {
@@ -25,6 +24,7 @@ interface Props {
 export default function AlertHistoryPanel({ allianceId }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
   const [error, setError]     = useState('')
+  const [open, setOpen]       = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -45,44 +45,81 @@ export default function AlertHistoryPanel({ allianceId }: Props) {
     }
 
     load()
-    // Refresh alongside the alert widget's own polling cadence.
-    const interval = setInterval(load, 15_000)
+    // Just needs to be fresh-ish for the preview line — not cooldown-critical.
+    const interval = setInterval(load, 30_000)
     return () => { cancelled = true; clearInterval(interval) }
   }, [allianceId])
 
-  return (
-    <div className="glass-card p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <History className="w-4 h-4 text-tactical-400" />
-        <p className="text-sm font-semibold text-tactical-900">Alert History</p>
-      </div>
+  const latest = entries?.[0] ?? null
 
-      {error ? (
-        <p className="text-xs text-red-500">{error}</p>
-      ) : entries === null ? (
-        <p className="text-xs text-tactical-400">Loading…</p>
-      ) : entries.length === 0 ? (
-        <p className="text-xs text-tactical-400">No alerts sent yet.</p>
-      ) : (
-        <div className="divide-y divide-tactical-100 max-h-72 overflow-y-auto -mx-1">
-          {entries.map(e => (
-            <div key={e.id} className="flex items-center justify-between gap-3 px-1 py-2">
-              <div className="min-w-0">
-                <p className="text-sm text-tactical-900 truncate">
-                  <span className="font-semibold">{e.sentBy}</span>
-                  <span className="text-tactical-400"> · {e.sentByRole.toUpperCase()}</span>
-                </p>
-                <p className="text-xs text-tactical-500 truncate">
-                  {e.title ?? e.alertType} · {relativeTime(e.sentAt)}
-                </p>
-              </div>
-              {e.recipients !== null && (
-                <span className="text-xs text-tactical-400 shrink-0">→ {e.recipients}</span>
+  return (
+    <>
+      {/* Compact bar */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full glass-card p-3 flex items-center justify-between hover:bg-surface-overlay transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <History className="w-4 h-4 text-tactical-400 shrink-0" />
+          <p className="text-sm font-semibold text-tactical-900 shrink-0">Alert History</p>
+          {latest && (
+            <p className="text-xs text-tactical-500 truncate">
+              · {latest.sentBy} sent {latest.title ?? latest.alertType} · {relativeTime(latest.sentAt)}
+            </p>
+          )}
+        </div>
+        <span className="text-tactical-400 text-sm shrink-0">View →</span>
+      </button>
+
+      {/* Modal */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-glass-lg w-full max-w-md max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-tactical-100">
+              <p className="text-sm font-semibold text-tactical-900">Alert History</p>
+              <button type="button" onClick={() => setOpen(false)} className="text-tactical-400 hover:text-tactical-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-2">
+              {error ? (
+                <p className="text-xs text-red-500 p-3">{error}</p>
+              ) : entries === null ? (
+                <p className="text-xs text-tactical-400 p-3">Loading…</p>
+              ) : entries.length === 0 ? (
+                <p className="text-xs text-tactical-400 p-3">No alerts sent yet.</p>
+              ) : (
+                <div className="divide-y divide-tactical-100">
+                  {entries.map(e => (
+                    <div key={e.id} className="flex items-center justify-between gap-3 p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm text-tactical-900 truncate">
+                          <span className="font-semibold">{e.sentBy}</span>
+                          <span className="text-tactical-400"> · {e.sentByRole.toUpperCase()}</span>
+                        </p>
+                        <p className="text-xs text-tactical-500 truncate">
+                          {e.title ?? e.alertType} · {relativeTime(e.sentAt)}
+                        </p>
+                      </div>
+                      {e.recipients !== null && (
+                        <span className="text-xs text-tactical-400 shrink-0">→ {e.recipients}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          ))}
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
