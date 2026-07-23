@@ -2,7 +2,7 @@
 import { headers }          from 'next/headers'
 import { redirect }         from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getWeekKey }       from '@/lib/utils/utc2'
+import { getWeekKey, getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import Link                 from 'next/link'
 import type { Role }        from '@/lib/types'
 
@@ -19,7 +19,8 @@ export default async function AlliancePage({
   if (!commanderUid) redirect('/login')
 
   const supabase = createAdminClient()
-  const weekKey  = getWeekKey()
+  const weekKey     = getWeekKey()            // used for DB queries below — do not change
+  const seasonLabel = getCurrentSeasonLabel() // used for display only — was raw "2026-W30"
 
   const [
     { data: alliance },
@@ -61,7 +62,7 @@ export default async function AlliancePage({
             <h1 className="text-xl font-semibold text-tactical-900">{alliance.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="badge badge-active">{alliance.status}</span>
-              <span className="text-xs text-tactical-500">{weekKey}</span>
+              <span className="text-xs text-tactical-500">{seasonLabel}</span>
             </div>
           </div>
         </div>
@@ -106,7 +107,7 @@ export default async function AlliancePage({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-tactical-900">DSB — {weekKey}</p>
+            <p className="font-semibold text-tactical-900">DSB — {seasonLabel}</p>
             <span className={`badge ${dsbEvent?.state ? STATE_COLOR[dsbEvent.state] : 'badge-inactive'}`}>
               {dsbEvent?.state ? STATE_LABEL[dsbEvent.state] : 'No Event'}
             </span>
@@ -132,7 +133,7 @@ export default async function AlliancePage({
 
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-tactical-900">Canyon — {weekKey}</p>
+            <p className="font-semibold text-tactical-900">Canyon — {seasonLabel}</p>
             <span className={`badge ${canyonEvent?.state ? STATE_COLOR[canyonEvent.state] : 'badge-inactive'}`}>
               {canyonEvent?.state ? STATE_LABEL[canyonEvent.state] : 'No Event'}
             </span>

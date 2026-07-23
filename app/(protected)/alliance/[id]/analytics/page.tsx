@@ -2,7 +2,7 @@
 import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getWeekKey }        from '@/lib/utils/utc2'
+import { getWeekKey, getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import type { Role }         from '@/lib/types'
 import AttendanceTrendChart  from '@/components/dashboard/AttendanceTrendChart'
 import DuelPerformanceChart  from '@/components/dashboard/DuelPerformanceChart'
@@ -267,7 +267,7 @@ export default async function AnalyticsPage({
       <div className="page-header">
         <h1 className="page-title">[{alliance?.tag}] Analytics</h1>
         <p className="page-subtitle">
-          {memberList.length} members · Last 8 weeks · Current: {weekKey}
+          {memberList.length} members · Last 8 weeks · Current: {getCurrentSeasonLabel()}
         </p>
       </div>
 

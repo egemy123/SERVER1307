@@ -2,7 +2,7 @@
 import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getWeekKey }        from '@/lib/utils/utc2'
+import { getWeekKey, getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import Link                  from 'next/link'
 import type { Role }         from '@/lib/types'
 
@@ -56,7 +56,7 @@ export default async function CanyonPage({
       <div className="flex items-center justify-between">
         <div className="page-header mb-0">
           <h1 className="page-title">Canyon Storm</h1>
-          <p className="page-subtitle">{weekKey}</p>
+          <p className="page-subtitle">{getCurrentSeasonLabel()}</p>
         </div>
         {isR4Plus && canyonEvent && (
           <Link href={`/alliance/${allianceId}/canyon/register`} className="btn-primary">

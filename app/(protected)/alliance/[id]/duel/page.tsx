@@ -2,7 +2,7 @@
 import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getWeekKey, getSeasonLabel } from '@/lib/utils/utc2'
+import { getWeekKey, getSeasonLabel, getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import Link                  from 'next/link'
 import type { Role, DuelResult } from '@/lib/types'
 import { DUEL_DAY_NAMES, DUEL_POINT_VALUES, pointsForDay } from '@/lib/types'
@@ -320,7 +320,7 @@ export default async function DuelPage({
         <div className="page-header mb-0">
           <h1 className="page-title">Alliance VS Duel</h1>
           <p className="page-subtitle">
-            {duelWeek ? getSeasonLabel(duelWeek.week_start) : weekKey} · {duelWeek?.mode === 'full' ? 'Detailed' : duelWeek?.mode === 'quick' ? 'Simple' : 'No week started'}
+            {duelWeek ? getSeasonLabel(duelWeek.week_start) : getCurrentSeasonLabel()} · {duelWeek?.mode === 'full' ? 'Detailed' : duelWeek?.mode === 'quick' ? 'Simple' : 'No week started'}
           </p>
         </div>
         {isR4Plus && (

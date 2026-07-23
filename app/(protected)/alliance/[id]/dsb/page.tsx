@@ -2,7 +2,7 @@
 import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getWeekKey }        from '@/lib/utils/utc2'
+import { getWeekKey, getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import Link                  from 'next/link'
 import type { Role }         from '@/lib/types'
 
@@ -67,7 +67,7 @@ export default async function DSBPage({
       <div className="flex items-center justify-between">
         <div className="page-header mb-0">
           <h1 className="page-title">Desert Storm Battlefield</h1>
-          <p className="page-subtitle">{weekKey}</p>
+          <p className="page-subtitle">{getCurrentSeasonLabel()}</p>
         </div>
         {isR4Plus && dsbEvent && (
           <Link href={`/alliance/${allianceId}/dsb/register`} className="btn-primary">
