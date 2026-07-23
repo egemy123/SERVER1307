@@ -68,11 +68,19 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
       const data = await res.json()
 
       if (res.status === 429) {
-        setToast({
-          message: 'Please wait before sending another alert.',
-          detail: `${data.secondsRemaining ?? 0}s remaining`,
-          variant: 'error',
-        })
+        if (data.reason === 'quota') {
+          setToast({
+            message: 'Daily alert limit reached.',
+            detail: `${data.used}/${data.limit} used today — resets at midnight UTC-2.`,
+            variant: 'error',
+          })
+        } else {
+          setToast({
+            message: 'Please wait before sending another alert.',
+            detail: `${data.secondsRemaining ?? 0}s remaining`,
+            variant: 'error',
+          })
+        }
         refetch()
         return
       }
@@ -114,7 +122,12 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
                 : error
                   ? <span className="text-red-500">{error}</span>
                   : ready
-                    ? `Ready · ${status?.recipients ?? 0} members`
+                    ? <>
+                        {`Ready · ${status?.recipients ?? 0} members`}
+                        {status?.dailyQuota && (
+                          <> · {status.dailyQuota.limit - status.dailyQuota.used}/{status.dailyQuota.limit} left today</>
+                        )}
+                      </>
                     : <>Cooldown <CooldownTimer secondsRemaining={status?.secondsRemaining ?? 0} className="tabular-nums" /></>}
             </p>
           </div>
@@ -174,6 +187,7 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
               secondsRemaining={status?.secondsRemaining ?? 0}
               sending={sending}
               disabled={!canSend}
+              quotaExhausted={!!status?.dailyQuota && status.dailyQuota.used >= status.dailyQuota.limit}
               onClick={handleSend}
             />
           </div>

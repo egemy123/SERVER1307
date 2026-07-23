@@ -9,10 +9,23 @@ interface SendAlertButtonProps {
   secondsRemaining: number
   sending: boolean
   disabled: boolean // true if no preset selected yet, or custom fields incomplete
+  quotaExhausted?: boolean
   onClick: () => void
 }
 
-export default function SendAlertButton({ ready, secondsRemaining, sending, disabled, onClick }: SendAlertButtonProps) {
+export default function SendAlertButton({ ready, secondsRemaining, sending, disabled, quotaExhausted, onClick }: SendAlertButtonProps) {
+  if (quotaExhausted) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="w-full py-4 rounded-2xl bg-tactical-100 text-tactical-500 font-semibold text-sm flex items-center justify-center gap-2 cursor-not-allowed"
+      >
+        Daily limit reached — resets at midnight UTC-2
+      </button>
+    )
+  }
+
   if (!ready) {
     return (
       <button

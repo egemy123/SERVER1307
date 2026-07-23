@@ -22,10 +22,13 @@ import { writeAuditLog }     from '@/lib/utils/audit'
 import { sendNotification }  from '@/lib/fcm/sendNotification'
 import { can } from '@/lib/utils/permissions'
 import type { Role } from '@/lib/types'
+import { getDayStartUTC2 } from '@/lib/utils/utc2'
 import {
   ALERT_PRESET_MAP,
   ALERT_COOLDOWN_SECONDS,
   CUSTOM_MESSAGE_MAX_LENGTH,
+  DAILY_ALERT_QUOTA,
+  QUOTA_EXEMPT_ROLES,
   type AlertPresetKey,
 } from '@/lib/alerts/presets'
 
@@ -72,6 +75,41 @@ export async function POST(req: Request) {
 
     const supabase = createAdminClient()
 
+    // ── Daily quota (r1/r2/r3 only — r4/r5/supreme unlimited) ───────────────
+    // Checked BEFORE the shared cooldown so an over-quota member doesn't
+    // burn the alliance-wide 60s window on a request that's going to be
+    // rejected anyway. Quota is derived from audit_logs directly — no extra
+    // counter column needed, and it's automatically accurate since a row is
+    // only ever written after a real, successful send further down.
+    const isQuotaExempt = QUOTA_EXEMPT_ROLES.includes(auth.role as (typeof QUOTA_EXEMPT_ROLES)[number])
+    if (!isQuotaExempt) {
+      const dayStart = getDayStartUTC2().toISOString()
+      const { count, error: quotaError } = await supabase
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('action', 'alliance_alert_sent')
+        .eq('performed_by', auth.commander_uid)
+        .eq('target_alliance_id', allianceId)
+        .gte('created_at', dayStart)
+
+      if (quotaError) {
+        console.error('[alerts/send] quota check failed:', quotaError.message)
+        return NextResponse.json({ error: 'Could not process alert request' }, { status: 500 })
+      }
+
+      if ((count ?? 0) >= DAILY_ALERT_QUOTA) {
+        return NextResponse.json(
+          {
+            error:  'Daily alert limit reached',
+            reason: 'quota',
+            used:   count,
+            limit:  DAILY_ALERT_QUOTA,
+          },
+          { status: 429 },
+        )
+      }
+    }
+
     // ── Atomic alliance-wide cooldown check + set ───────────────────────────
     const { data: cooldownResult, error: cooldownError } = await supabase.rpc(
       'try_send_alliance_alert',
@@ -87,6 +125,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: 'Cooldown active',
+          reason: 'cooldown',
           secondsRemaining: row?.seconds_remaining ?? ALERT_COOLDOWN_SECONDS,
         },
         { status: 429 },

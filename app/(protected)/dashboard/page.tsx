@@ -6,6 +6,7 @@ import UTCClock from '@/components/layout/UTCClock'
 import AllianceOverviewCard from '@/components/dashboard/AllianceOverviewCard'
 import AllianceTargetsCard from '@/components/dashboard/AllianceTargetsCard'
 import AllianceAlertWidget from '@/components/dashboard/AllianceAlertWidget'
+import AlertHistoryPanel   from '@/components/dashboard/AlertHistoryPanel'
 import { getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import type { Role } from '@/lib/types'
 
@@ -145,6 +146,7 @@ export default async function DashboardPage() {
           are still computed above and still feed the flagged-commanders
           banner below and AllianceOverviewCard's activeCount prop. */}
       {allianceId && <AllianceAlertWidget allianceId={allianceId} />}
+      {allianceId && <AlertHistoryPanel allianceId={allianceId} />}
 
       {/* Inactive alert */}
       {isR4Plus && inactiveCount > 0 && (

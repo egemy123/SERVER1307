@@ -14,6 +14,7 @@ export interface AlertStatus {
   recipients: number
   ready: boolean
   secondsRemaining: number
+  dailyQuota: { used: number; limit: number } | null
 }
 
 const POLL_INTERVAL_MS = 5000

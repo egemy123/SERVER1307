@@ -57,6 +57,18 @@ export function getWeekKey(date: Date = new Date()): string {
 }
 
 /**
+ * Get 00:00 of the current UTC-2 day, returned as a UTC Date (for Supabase
+ * queries). Used for daily quota resets — e.g. "10 alerts per day" resets
+ * at midnight UTC-2, not midnight server time.
+ */
+export function getDayStartUTC2(date: Date = new Date()): Date {
+  const u = toUTC2(date)
+  const start = new Date(u)
+  start.setUTCHours(0, 0, 0, 0)
+  return new Date(start.getTime() - UTC2_OFFSET_MS)
+}
+
+/**
  * Get Monday 00:00 of the current UTC-2 week, returned as UTC Date (for Supabase)
  */
 export function getWeekStart(date: Date = new Date()): Date {
