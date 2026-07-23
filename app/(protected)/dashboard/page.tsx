@@ -2,12 +2,11 @@
 
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import UTCClock from '@/components/layout/UTCClock'
 import AllianceOverviewCard from '@/components/dashboard/AllianceOverviewCard'
 import AllianceTargetsCard from '@/components/dashboard/AllianceTargetsCard'
 import AllianceAlertWidget from '@/components/dashboard/AllianceAlertWidget'
-import AlertHistoryPanel   from '@/components/dashboard/AlertHistoryPanel'
+import InactiveCommandersBar from '@/components/dashboard/InactiveCommandersBar'
 import { getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import type { Role } from '@/lib/types'
 
@@ -147,22 +146,10 @@ export default async function DashboardPage() {
           are still computed above and still feed the flagged-commanders
           banner below and AllianceOverviewCard's activeCount prop. */}
       {allianceId && <AllianceAlertWidget allianceId={allianceId} />}
-      {allianceId && <AlertHistoryPanel allianceId={allianceId} />}
 
-      {/* Inactive alert — compact bar, click through to the filtered list */}
+      {/* Inactive alert — compact bar, opens a popup (same pattern as Alert History) */}
       {isR4Plus && inactiveCount > 0 && (
-        <Link
-          href={`/alliance/${allianceId}/members?filter=inactive`}
-          className="glass-card p-3 border border-amber-300 bg-amber-50/30 flex items-center justify-between hover:bg-amber-50/60 transition-colors"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-amber-500 animate-pulse-soft">⚠</span>
-            <p className="font-semibold text-amber-800 text-sm truncate">
-              {inactiveCount} Inactive Commander{inactiveCount !== 1 ? 's' : ''} Flagged
-            </p>
-          </div>
-          <span className="text-amber-600 text-sm shrink-0">View →</span>
-        </Link>
+        <InactiveCommandersBar members={inactiveMembers ?? []} />
       )}
 
       {/* Alliance Dashboard */}

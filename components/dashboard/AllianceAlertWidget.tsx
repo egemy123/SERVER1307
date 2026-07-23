@@ -14,6 +14,7 @@ import NotificationPreview from '@/components/alerts/NotificationPreview'
 import SendAlertButton    from '@/components/alerts/SendAlertButton'
 import CooldownTimer      from '@/components/alerts/CooldownTimer'
 import Toast              from '@/components/alerts/Toast'
+import AlertHistoryRow    from '@/components/dashboard/AlertHistoryRow'
 
 interface AllianceAlertWidgetProps {
   allianceId: string
@@ -109,38 +110,42 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
   return (
     <>
       {/* ── Compact dashboard card ── */}
-      <div className="glass-card p-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-accent-light flex items-center justify-center shrink-0">
-            <Bell className="w-5 h-5 text-accent-deep" />
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-accent-light flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-accent-deep" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-tactical-900">Alliance Alert</p>
+              <p className="text-xs text-tactical-500 truncate">
+                {loading
+                  ? 'Loading…'
+                  : error
+                    ? <span className="text-red-500">{error}</span>
+                    : ready
+                      ? <>
+                          {`Ready · ${status?.recipients ?? 0} members`}
+                          {status?.dailyQuota && (
+                            <> · {status.dailyQuota.limit - status.dailyQuota.used}/{status.dailyQuota.limit} left today</>
+                          )}
+                        </>
+                      : <>Cooldown <CooldownTimer secondsRemaining={status?.secondsRemaining ?? 0} className="tabular-nums" /></>}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-tactical-900">Alliance Alert</p>
-            <p className="text-xs text-tactical-500 truncate">
-              {loading
-                ? 'Loading…'
-                : error
-                  ? <span className="text-red-500">{error}</span>
-                  : ready
-                    ? <>
-                        {`Ready · ${status?.recipients ?? 0} members`}
-                        {status?.dailyQuota && (
-                          <> · {status.dailyQuota.limit - status.dailyQuota.used}/{status.dailyQuota.limit} left today</>
-                        )}
-                      </>
-                    : <>Cooldown <CooldownTimer secondsRemaining={status?.secondsRemaining ?? 0} className="tabular-nums" /></>}
-            </p>
-          </div>
+          <button
+            type="button"
+            disabled={!!error}
+            onClick={() => setOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent-mid
+                       active:scale-[0.97] transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Send Alert
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={!!error}
-          onClick={() => setOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent-mid
-                     active:scale-[0.97] transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Send Alert
-        </button>
+
+        <AlertHistoryRow allianceId={allianceId} />
       </div>
 
       {/* ── Modal ── */}
