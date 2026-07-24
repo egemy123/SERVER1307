@@ -134,18 +134,19 @@ export default function AllianceAlertWidget({ allianceId }: AllianceAlertWidgetP
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            disabled={!!error}
-            onClick={() => setOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent-mid
-                       active:scale-[0.97] transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send Alert
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <AlertHistoryRow allianceId={allianceId} />
+            <button
+              type="button"
+              disabled={!!error}
+              onClick={() => setOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent-mid
+                         active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Send Alert
+            </button>
+          </div>
         </div>
-
-        <AlertHistoryRow allianceId={allianceId} />
       </div>
 
       {/* ── Modal ── */}

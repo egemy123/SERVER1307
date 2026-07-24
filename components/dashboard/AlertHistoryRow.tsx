@@ -1,8 +1,8 @@
 'use client'
 // components/dashboard/AlertHistoryRow.tsx
-// Inline history trigger — meant to sit INSIDE another card (AllianceAlertWidget),
-// not as its own glass-card. Same fetch/modal logic as before, just no outer
-// card wrapper of its own so it visually belongs to the parent.
+// Icon-only button, sits inline next to "Send Alert" in the same row.
+// Click opens a modal with the full history — no text label taking up
+// space in the card itself, just the icon.
 
 import { useEffect, useState } from 'react'
 import { History, X } from 'lucide-react'
@@ -50,26 +50,17 @@ export default function AlertHistoryRow({ allianceId }: Props) {
     return () => { cancelled = true; clearInterval(interval) }
   }, [allianceId])
 
-  const latest = entries?.[0] ?? null
-
   return (
     <>
-      {/* Inline row — border-top divider, sits inside the parent card */}
+      {/* Icon-only trigger — sits inline next to Send Alert */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-between gap-3 pt-3 mt-3 border-t border-tactical-100 hover:opacity-80 transition-opacity text-left"
+        title="Alert History"
+        className="w-11 h-11 rounded-xl border border-tactical-200 flex items-center justify-center
+                   text-tactical-600 hover:bg-surface-overlay active:scale-[0.97] transition-all shrink-0"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <History className="w-3.5 h-3.5 text-tactical-400 shrink-0" />
-          <p className="text-xs font-medium text-tactical-600 shrink-0">Alert History</p>
-          {latest && (
-            <p className="text-xs text-tactical-400 truncate">
-              · {latest.sentBy} sent {latest.title ?? latest.alertType} · {relativeTime(latest.sentAt)}
-            </p>
-          )}
-        </div>
-        <span className="text-tactical-400 text-xs shrink-0">View →</span>
+        <History className="w-5 h-5" />
       </button>
 
       {/* Modal */}
