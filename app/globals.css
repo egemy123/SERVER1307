@@ -224,3 +224,33 @@ body {
   }
   .no-print { display: none !important; }
 }
+
+/* Add these to your global stylesheet (e.g. app/globals.css) */
+
+/* Soft pulsing glow behind the crown */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.9; transform: scale(1.15); }
+}
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+
+/* Falling gold dust specks — fade in near the crown, drift down + out, fade out, loop forever */
+@keyframes dust-fall-1 {
+  0%   { transform: translate(0, -2px); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translate(-4px, 14px); opacity: 0; }
+}
+@keyframes dust-fall-2 {
+  0%   { transform: translate(0, -2px); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translate(5px, 16px); opacity: 0; }
+}
+@keyframes dust-fall-3 {
+  0%   { transform: translate(0, -2px); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translate(2px, 12px); opacity: 0; }
+}
+
+.animate-dust-1 { animation: dust-fall-1 2.2s ease-in infinite; }
+.animate-dust-2 { animation: dust-fall-2 2.6s ease-in infinite 0.5s; }
+.animate-dust-3 { animation: dust-fall-3 2.4s ease-in infinite 1s; }
