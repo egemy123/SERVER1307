@@ -69,24 +69,6 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="stat-card text-center">
-          <p className="text-2xl font-semibold text-tactical-900">{sorted.length}</p>
-          <p className="text-xs text-tactical-500 mt-1">Total</p>
-        </div>
-        <div className="stat-card text-center">
-          <p className="text-2xl font-semibold text-accent-deep">{activeCount}</p>
-          <p className="text-xs text-tactical-500 mt-1">Active</p>
-        </div>
-        <div className="stat-card text-center">
-          <p className={`text-2xl font-semibold ${inactiveCount > 0 ? 'text-amber-700' : 'text-tactical-900'}`}>
-            {inactiveCount}
-          </p>
-          <p className="text-xs text-tactical-500 mt-1">Inactive</p>
-        </div>
-      </div>
-
       {/* Leader (Supreme/R5) — crown badges the avatar, name/tag stacked right */}
       {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
         <div key={m.uid} className="flex justify-center">
