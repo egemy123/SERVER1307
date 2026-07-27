@@ -107,13 +107,13 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Leader (Supreme/R5) — shown as its own card, not a collapsible group */}
+      {/* Leader (Supreme/R5) — centered, standalone card at the top */}
       {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
-        <div key={m.uid} className="glass-card p-5 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-accent-light flex items-center justify-center shrink-0">
-            <span className="text-base font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
-          </div>
-          <div className="min-w-0">
+        <div key={m.uid} className="flex justify-center">
+          <div className="glass-card p-5 flex flex-col items-center gap-2 w-full max-w-xs text-center">
+            <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+              <span className="text-lg font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
+            </div>
             <p className="font-semibold text-tactical-900">{m.name}</p>
             <span
               className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
@@ -125,12 +125,14 @@ export default async function MembersPage({
         </div>
       ))}
 
-      {/* Rank groups — R4/R3/R2/R1, collapsed by default */}
+      {/* Rank groups — R4/R3/R2/R1 accordion. Only the viewer's own rank
+          starts expanded; the rest start closed and open on click. */}
       <MemberRoleGroups
         members={sorted.filter((m: any) => m.role !== 'supreme' && m.role !== 'r5')}
         roleOrder={['r4', 'r3', 'r2', 'r1']}
         roleLabel={ROLE_LABEL}
         roleColor={ROLE_COLOR}
+        viewerRole={role}
       />
     </div>
   )
