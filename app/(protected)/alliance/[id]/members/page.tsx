@@ -3,7 +3,6 @@ import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Role }         from '@/lib/types'
-import { Crown }             from 'lucide-react'
 import MemberRoleGroups      from '@/components/dashboard/MemberRoleGroups'
 
 const ROLE_COLOR: Record<string, string> = {
@@ -56,7 +55,6 @@ export default async function MembersPage({
 
   const activeCount   = sorted.filter((m: any) => m.status === 'active').length
   const inactiveCount = sorted.filter((m: any) => m.inactive_flagged).length
-  const isR4Plus      = ['r4', 'r5', 'supreme'].includes(role)
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
@@ -89,24 +87,43 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Leader (Supreme/R5) — horizontal card: crown on top, avatar left, name/tag stacked right */}
+      {/* Leader (Supreme/R5) — crown badges the avatar, name/tag stacked right */}
       {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
         <div key={m.uid} className="flex justify-center">
-          <div className="glass-card p-5 flex flex-col items-center gap-2 w-full max-w-xs">
-            <Crown className="w-5 h-5 text-amber-500 fill-amber-400" />
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+          <div className="glass-card p-5 flex items-center justify-center gap-3 w-full max-w-xs">
+            <div className="flex flex-col items-center">
+              <svg viewBox="0 0 24 16" className="w-9 h-9 -mb-2 z-10 drop-shadow-[0_2px_2px_rgba(180,83,9,0.35)]">
+                <defs>
+                  <linearGradient id={`crownGold-${m.uid}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#FDE68A" />
+                    <stop offset="55%"  stopColor="#F59E0B" />
+                    <stop offset="100%" stopColor="#B45309" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M2 6.5 L6 9.5 L12 2 L18 9.5 L22 6.5 L20 14 H4 Z"
+                  fill={`url(#crownGold-${m.uid})`}
+                  stroke="#92400E"
+                  strokeWidth="0.6"
+                  strokeLinejoin="round"
+                />
+                <circle cx="2"  cy="6.5" r="1.5" fill="#FBBF24" stroke="#92400E" strokeWidth="0.4" />
+                <circle cx="12" cy="2"   r="1.5" fill="#FBBF24" stroke="#92400E" strokeWidth="0.4" />
+                <circle cx="22" cy="6.5" r="1.5" fill="#FBBF24" stroke="#92400E" strokeWidth="0.4" />
+                <rect x="5" y="12" width="14" height="2" rx="0.5" fill="#92400E" opacity="0.35" />
+              </svg>
+              <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0 ring-4 ring-white">
                 <span className="text-lg font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
               </div>
-              <div className="flex flex-col items-start gap-1">
-                <p className="font-semibold text-tactical-900">{m.name}</p>
-                <span
-                  className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
-                  style={{ backgroundColor: ROLE_COLOR[m.role] }}
-                >
-                  {ROLE_LABEL[m.role]}
-                </span>
-              </div>
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <p className="font-semibold text-tactical-900">{m.name}</p>
+              <span
+                className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
+                style={{ backgroundColor: ROLE_COLOR[m.role] }}
+              >
+                {ROLE_LABEL[m.role]}
+              </span>
             </div>
           </div>
         </div>
