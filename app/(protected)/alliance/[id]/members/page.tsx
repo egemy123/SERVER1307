@@ -3,6 +3,11 @@ import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Role }         from '@/lib/types'
+import MemberRoleGroups      from '@/components/dashboard/MemberRoleGroups'
+
+const ROLE_COLOR: Record<string, string> = {
+  supreme: '#7C3AED', r5: '#15803D', r4: '#1D4ED8', r3: '#64748B', r2: '#64748B', r1: '#64748B',
+}
 
 const ROLE_ORDER: Record<string, number> = {
   supreme: 0, r5: 1, r4: 2, r3: 3, r2: 4, r1: 5,
@@ -102,69 +107,31 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Member table */}
-      <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table-glass">
-            <thead>
-              <tr>
-                <th>Commander</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Verified</th>
-                <th>Flags</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((m: any) => (
-                <tr key={m.uid}>
-                  <td>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-accent-light flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-accent-deep">
-                          {m.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-tactical-900 text-sm">{m.name}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="badge badge-active text-xs uppercase">
-                      {ROLE_LABEL[m.role] ?? m.role}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge text-xs ${STATUS_BADGE[m.status] ?? 'badge-inactive'}`}>
-                      {m.status}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge text-xs ${m.verification_status === 'linked' ? 'badge-active' : 'badge-pending'}`}>
-                      {m.verification_status === 'linked' ? '✓ linked' : m.verification_status}
-                    </span>
-                  </td>
-                  <td>
-                    {m.inactive_flagged ? (
-                      <span className="badge badge-warning animate-pulse-soft text-xs">⚠ inactive</span>
-                    ) : (
-                      <span className="text-xs text-tactical-300">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center py-8 text-tactical-400 text-sm">
-                    No members found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* Leader (Supreme/R5) — shown as its own card, not a collapsible group */}
+      {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
+        <div key={m.uid} className="glass-card p-5 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+            <span className="text-base font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-tactical-900">{m.name}</p>
+            <span
+              className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
+              style={{ backgroundColor: ROLE_COLOR[m.role] }}
+            >
+              {ROLE_LABEL[m.role]}
+            </span>
+          </div>
         </div>
-      </div>
+      ))}
+
+      {/* Rank groups — R4/R3/R2/R1, collapsed by default */}
+      <MemberRoleGroups
+        members={sorted.filter((m: any) => m.role !== 'supreme' && m.role !== 'r5')}
+        roleOrder={['r4', 'r3', 'r2', 'r1']}
+        roleLabel={ROLE_LABEL}
+        roleColor={ROLE_COLOR}
+      />
     </div>
   )
 }
