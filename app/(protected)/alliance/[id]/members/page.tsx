@@ -69,12 +69,25 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Leader (Supreme/R5) — crown badges the avatar, name/tag stacked right */}
+      {/* Leader (Supreme/R5) — glowing crown with gold dust, avatar left, name/tag stacked right */}
       {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
         <div key={m.uid} className="flex justify-center">
           <div className="glass-card p-5 flex items-center justify-center gap-3 w-full max-w-xs">
-            <div className="flex flex-col items-center">
-              <svg viewBox="0 0 24 16" className="w-9 h-9 -mb-2 z-10 drop-shadow-[0_2px_2px_rgba(180,83,9,0.35)]">
+            <div className="relative flex flex-col items-center">
+
+              {/* soft gold glow behind the crown */}
+              <div className="absolute -top-1 w-10 h-10 rounded-full bg-amber-300/50 blur-md animate-pulse-soft" />
+
+              {/* gold dust specks */}
+              <span className="absolute -top-1 -left-2 w-1 h-1 rounded-full bg-amber-300 animate-dust-1" />
+              <span className="absolute -top-2 left-6 w-1 h-1 rounded-full bg-yellow-200 animate-dust-2" />
+              <span className="absolute top-0 -right-2 w-[3px] h-[3px] rounded-full bg-amber-400 animate-dust-3" />
+              <span className="absolute -top-3 left-2 w-[3px] h-[3px] rounded-full bg-yellow-100 animate-dust-1" />
+
+              <svg
+                viewBox="0 0 24 16"
+                className="relative w-9 h-9 -mb-2 z-10 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]"
+              >
                 <defs>
                   <linearGradient id={`crownGold-${m.uid}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#FDE68A" />
@@ -94,6 +107,7 @@ export default async function MembersPage({
                 <circle cx="22" cy="6.5" r="1.5" fill="#FBBF24" stroke="#92400E" strokeWidth="0.4" />
                 <rect x="5" y="12" width="14" height="2" rx="0.5" fill="#92400E" opacity="0.35" />
               </svg>
+
               <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0 ring-4 ring-white">
                 <span className="text-lg font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
               </div>
