@@ -3,6 +3,7 @@ import { headers }           from 'next/headers'
 import { redirect }          from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Role }         from '@/lib/types'
+import { Crown }             from 'lucide-react'
 import MemberRoleGroups      from '@/components/dashboard/MemberRoleGroups'
 
 const ROLE_COLOR: Record<string, string> = {
@@ -70,25 +71,6 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Inactive alert */}
-      {isR4Plus && inactiveCount > 0 && (
-        <div className="glass-card p-4 border border-amber-300 bg-amber-50/30">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-amber-500 animate-pulse-soft text-lg">⚠</span>
-            <p className="font-semibold text-amber-800 text-sm">
-              {inactiveCount} member{inactiveCount !== 1 ? 's' : ''} flagged inactive
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {sorted
-              .filter((m: any) => m.inactive_flagged)
-              .map((m: any) => (
-                <span key={m.uid} className="badge badge-warning">{m.name}</span>
-              ))}
-          </div>
-        </div>
-      )}
-
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         <div className="stat-card text-center">
@@ -107,20 +89,25 @@ export default async function MembersPage({
         </div>
       </div>
 
-      {/* Leader (Supreme/R5) — centered, standalone card at the top */}
+      {/* Leader (Supreme/R5) — horizontal card: crown on top, avatar left, name/tag stacked right */}
       {sorted.filter((m: any) => m.role === 'supreme' || m.role === 'r5').map((m: any) => (
         <div key={m.uid} className="flex justify-center">
-          <div className="glass-card p-5 flex flex-col items-center gap-2 w-full max-w-xs text-center">
-            <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0">
-              <span className="text-lg font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
+          <div className="glass-card p-5 flex flex-col items-center gap-2 w-full max-w-xs">
+            <Crown className="w-5 h-5 text-amber-500 fill-amber-400" />
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+                <span className="text-lg font-bold text-accent-deep">{m.name.charAt(0).toUpperCase()}</span>
+              </div>
+              <div className="flex flex-col items-start gap-1">
+                <p className="font-semibold text-tactical-900">{m.name}</p>
+                <span
+                  className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
+                  style={{ backgroundColor: ROLE_COLOR[m.role] }}
+                >
+                  {ROLE_LABEL[m.role]}
+                </span>
+              </div>
             </div>
-            <p className="font-semibold text-tactical-900">{m.name}</p>
-            <span
-              className="text-xs font-bold uppercase px-2 py-0.5 rounded-md text-white"
-              style={{ backgroundColor: ROLE_COLOR[m.role] }}
-            >
-              {ROLE_LABEL[m.role]}
-            </span>
           </div>
         </div>
       ))}
