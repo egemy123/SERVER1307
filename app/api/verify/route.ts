@@ -29,20 +29,42 @@ export async function POST(req: Request) {
 
     // ── ACTION: generate_code ────────────────
     if (action === 'generate_code') {
-      const { data: commander, error } = await supabase
+      const { data: commander } = await supabase
         .from('commanders')
         .select('uid, name, status, verification_status')
         .eq('uid', commander_uid)
         .single()
 
-      if (error || !commander) {
-        return NextResponse.json({ error: 'Commander not found' }, { status: 404 })
-      }
-      if (commander.status === 'disabled') {
-        return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
-      }
-      if (commander.verification_status === 'linked') {
-        return NextResponse.json({ error: 'Already verified and linked' }, { status: 409 })
+      // SECURITY: this endpoint is unauthenticated by necessity (it runs
+      // before the caller has any session) — meaning anyone can POST any
+      // commander_uid here. To prevent account enumeration, every outcome
+      // below returns the EXACT SAME generic response, whether the
+      // commander doesn't exist, is disabled, or is already linked. An
+      // attacker probing UIDs gets no signal either way — only the real
+      // account owner, watching their own in-game/notification channel
+      // for the actual code, can tell whether anything happened.
+      const genericResponse = () => NextResponse.json({
+        success: true,
+        message: 'If this Commander ID is valid and eligible, a verification code has been generated.',
+      })
+
+      if (!commander) return genericResponse()
+      if (commander.status === 'disabled') return genericResponse()
+      if (commander.verification_status === 'linked') return genericResponse()
+
+      // Cooldown — stops an attacker (or a mis-clicking legitimate user)
+      // from repeatedly regenerating codes for the same UID in rapid
+      // succession. A real account owner never needs a new code more
+      // than once a minute.
+      const { data: existingCode } = await supabase
+        .from('verification_codes')
+        .select('created_at')
+        .eq('commander_uid', commander_uid)
+        .single()
+
+      if (existingCode) {
+        const secondsSinceLast = (Date.now() - new Date(existingCode.created_at).getTime()) / 1000
+        if (secondsSinceLast < 60) return genericResponse()
       }
 
       const newCode   = generateCode()
@@ -68,7 +90,7 @@ export async function POST(req: Request) {
       // For now: log to console (Supreme checks server logs or admin panel)
       console.log(`\n[VERIFICATION CODE]\nCommander: ${commander.name} (${commander_uid})\nCode: ${newCode}\nExpires: ${expiresAt}\n`)
 
-      return NextResponse.json({ success: true })
+      return genericResponse()
     }
 
     // ── ACTION: verify_code ──────────────────
@@ -138,17 +160,26 @@ export async function POST(req: Request) {
       const firebaseUid = decoded.uid
 
       // Get commander — must be in 'verified' state
-      const { data: commander, error: cmdErr } = await supabase
+      const { data: commander } = await supabase
         .from('commanders')
         .select('uid, name, role, alliance_id, verification_status, linked_google_uid')
         .eq('uid', commander_uid)
         .single()
 
-      if (cmdErr || !commander) {
-        return NextResponse.json({ error: 'Commander not found' }, { status: 404 })
-      }
-      if (commander.verification_status !== 'verified') {
-        return NextResponse.json({ error: 'Code not verified yet' }, { status: 400 })
+      // SECURITY: same enumeration concern as generate_code above — ANY
+      // Google account holder can call this with a guessed commander_uid.
+      // "Not found" and "not verified yet" are collapsed into one generic
+      // response so a scan of UIDs can't distinguish real accounts from
+      // fake ones. (Once an account IS in 'verified' state, reaching that
+      // state already required knowing the real, secret, rate-limited
+      // code — so the more specific conflict messages past this point are
+      // safe to keep, since an attacker can't have engineered their way
+      // into a 'verified' commander_uid they don't actually own.)
+      if (!commander || commander.verification_status !== 'verified') {
+        return NextResponse.json(
+          { error: 'This account is not ready to be linked yet.' },
+          { status: 400 }
+        )
       }
       if (commander.linked_google_uid && commander.linked_google_uid !== firebaseUid) {
         return NextResponse.json({ error: 'Already linked to a different Google account' }, { status: 409 })

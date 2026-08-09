@@ -7,6 +7,11 @@ interface InactiveMember {
   name:               string
   role:               string
   inactive_flagged_at: string | null
+  /** Times absent (missed the day entirely) — last 8 Duel weeks. Never
+   *  combined with belowMinCount; always shown as two separate numbers. */
+  absentCount?:   number
+  /** Times played but failed to reach the minimum score — last 8 Duel weeks. */
+  belowMinCount?: number
 }
 
 interface Props {
@@ -28,7 +33,7 @@ export default function InactiveReport({ members, allianceId }: Props) {
             Inactive Members
           </p>
           <p style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
-            Currently flagged inactive
+            Currently flagged inactive · Absent vs Below-Minimum, last 8 weeks
           </p>
         </div>
         {members.length > 0 && (
@@ -78,11 +83,20 @@ export default function InactiveReport({ members, allianceId }: Props) {
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    fontSize: 11, color: '#B45309', fontWeight: 500,
-                  }}>
-                    ⚠ Inactive
-                  </span>
+                  {(typeof m.absentCount === 'number' || typeof m.belowMinCount === 'number') ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>
+                        ✗ Absent: {m.absentCount ?? 0}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#B45309', fontWeight: 600 }}>
+                        ⚠ Below Min: {m.belowMinCount ?? 0}
+                      </span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#B45309', fontWeight: 500 }}>
+                      ⚠ Inactive
+                    </span>
+                  )}
                   {m.inactive_flagged_at && (
                     <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>
                       {new Date(m.inactive_flagged_at).toLocaleDateString('en-GB', {

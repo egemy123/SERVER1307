@@ -96,7 +96,22 @@ export default async function AnalyticsPage({
   const dsbAtt      = dsbAttendance ?? []
   const canyonList  = canyonEvents ?? []
   const canyonAtt   = canyonAttendance ?? []
-  const inactiveList = inactiveMembers ?? []
+
+  // ── Absent vs Below-Minimum breakdown for flagged members — reuses the
+  // duel_entries already fetched above (last 8 weeks), same distinction
+  // (never combined) as the Duel page's own Participation Analytics.
+  const absentCountByUid   = new Map<string, number>()
+  const belowMinCountByUid = new Map<string, number>()
+  for (const e of entryList) {
+    if (e.status === 'absent')        absentCountByUid.set(e.commander_uid, (absentCountByUid.get(e.commander_uid) ?? 0) + 1)
+    else if (e.status === 'below_minimum') belowMinCountByUid.set(e.commander_uid, (belowMinCountByUid.get(e.commander_uid) ?? 0) + 1)
+  }
+
+  const inactiveList = (inactiveMembers ?? []).map((m: any) => ({
+    ...m,
+    absentCount:   absentCountByUid.get(m.uid) ?? 0,
+    belowMinCount: belowMinCountByUid.get(m.uid) ?? 0,
+  }))
 
   // ── Build DSB attendance trend data ──────────
   const dsbTrend = dsbList.map(event => {

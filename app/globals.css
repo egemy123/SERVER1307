@@ -228,7 +228,7 @@ body {
 /* Add these to your global stylesheet (e.g. app/globals.css) */
 
 /* Soft pulsing glow behind the crown */
-@keyframes pulse-soft {
+ @keyframes pulse-soft {
   0%, 100% { opacity: 0.5; transform: scale(1); }
   50%      { opacity: 0.9; transform: scale(1.15); }
 }

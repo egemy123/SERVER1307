@@ -6,7 +6,6 @@ import UTCClock from '@/components/layout/UTCClock'
 import AllianceOverviewCard from '@/components/dashboard/AllianceOverviewCard'
 import AllianceTargetsCard from '@/components/dashboard/AllianceTargetsCard'
 import AllianceAlertWidget from '@/components/dashboard/AllianceAlertWidget'
-import InactiveCommandersBar from '@/components/dashboard/InactiveCommandersBar'
 import { getCurrentSeasonLabel } from '@/lib/utils/utc2'
 import type { Role } from '@/lib/types'
 
@@ -94,6 +93,44 @@ export default async function DashboardPage() {
   const inactiveCount = (inactiveMembers ?? []).length
   const isR4Plus = ['r4', 'r5', 'supreme'].includes(role)
   const canEditAlliance = role === 'r4' || role === 'r5' || role === 'supreme'
+
+  // ── Absent vs Below-Minimum breakdown for flagged members — last 8 Duel
+  // weeks, same distinction (never combined) as the Duel page's own
+  // Participation Analytics.
+  const flaggedUids = (inactiveMembers ?? []).map((m: any) => m.uid)
+  const absentCountByUid  = new Map<string, number>()
+  const belowMinCountByUid = new Map<string, number>()
+
+  if (allianceId && flaggedUids.length > 0) {
+    const { data: recentWeeks } = await supabase
+      .from('duel_weeks')
+      .select('id')
+      .eq('alliance_id', allianceId)
+      .order('week_key', { ascending: false })
+      .limit(8)
+
+    const weekIds = (recentWeeks ?? []).map(w => w.id)
+
+    if (weekIds.length > 0) {
+      const { data: relevantEntries } = await supabase
+        .from('duel_entries')
+        .select('commander_uid, status')
+        .in('duel_week_id', weekIds)
+        .in('commander_uid', flaggedUids)
+        .in('status', ['absent', 'below_minimum'])
+
+      for (const e of (relevantEntries ?? [])) {
+        const target = e.status === 'absent' ? absentCountByUid : belowMinCountByUid
+        target.set(e.commander_uid, (target.get(e.commander_uid) ?? 0) + 1)
+      }
+    }
+  }
+
+  const inactiveMembersWithCounts = (inactiveMembers ?? []).map((m: any) => ({
+    ...m,
+    absentCount:   absentCountByUid.get(m.uid) ?? 0,
+    belowMinCount: belowMinCountByUid.get(m.uid) ?? 0,
+  }))
   const canRenameAlliance = role === 'r5' || role === 'supreme'
 
   const ACTION_LABELS: Record<string, string> = {
@@ -147,9 +184,31 @@ export default async function DashboardPage() {
           banner below and AllianceOverviewCard's activeCount prop. */}
       {allianceId && <AllianceAlertWidget allianceId={allianceId} />}
 
-      {/* Inactive alert — compact bar, opens a popup (same pattern as Alert History) */}
+      {/* Inactive alert */}
       {isR4Plus && inactiveCount > 0 && (
-        <InactiveCommandersBar members={inactiveMembers ?? []} />
+        <div className="glass-card p-4 border border-amber-300 bg-amber-50/30">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-amber-500 animate-pulse-soft">⚠</span>
+            <p className="font-semibold text-amber-800 text-sm">
+              {inactiveCount} Inactive Commander
+              {inactiveCount !== 1 ? 's' : ''} Flagged
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {inactiveMembersWithCounts.map((m: any) => (
+              <span key={m.uid} className="badge badge-warning" title={`Absent ${m.absentCount} time(s) · Below minimum ${m.belowMinCount} time(s), last 8 weeks`}>
+                {m.name}
+                {(m.absentCount > 0 || m.belowMinCount > 0) && (
+                  <span style={{ marginLeft: 6, fontWeight: 600 }}>
+                    {m.absentCount > 0 && <span style={{ color: '#DC2626' }}>✗{m.absentCount}</span>}
+                    {m.absentCount > 0 && m.belowMinCount > 0 && ' '}
+                    {m.belowMinCount > 0 && <span style={{ color: '#B45309' }}>⚠{m.belowMinCount}</span>}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Alliance Dashboard */}
