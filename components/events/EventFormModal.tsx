@@ -15,15 +15,16 @@ interface Props {
   allianceId: string
   onClose: () => void
   onCreated: () => void
+  initialDate?: string
 }
 
-export default function EventFormModal({ allianceId, onClose, onCreated }: Props) {
+export default function EventFormModal({ allianceId, onClose, onCreated, initialDate }: Props) {
   const [title, setTitle]           = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory]     = useState<EventCategory>('custom')
   const [priority, setPriority]     = useState<EventPriority>('medium')
   const [visibility, setVisibility] = useState<EventVisibility>('alliance')
-  const [eventDate, setEventDate]   = useState('')
+  const [eventDate, setEventDate]   = useState(initialDate ?? '')
   const [allDay, setAllDay]         = useState(false)
   const [startTime, setStartTime]   = useState('')
   const [endTime, setEndTime]       = useState('')

@@ -14,6 +14,7 @@ import {
 } from '@/lib/events/types'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import EventFormModal from '@/components/events/EventFormModal'
+import MonthCalendar from '@/components/events/MonthCalendar'
 
 interface EventWithExtras extends CalendarEvent {
   calendar_event_participants: { commander_uid: string; response: AttendanceResponse | null }[]
@@ -155,6 +156,13 @@ export default function EventsAgendaPage() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [myUid, setMyUid] = useState('')
+  const [view, setView] = useState<'agenda' | 'month'>('agenda')
+  const [prefillDate, setPrefillDate] = useState<string | undefined>(undefined)
+
+  const openCreate = (dateKey?: string) => {
+    setPrefillDate(dateKey)
+    setShowCreate(true)
+  }
 
   const fetchEvents = useCallback(async () => {
     const res = await fetch('/api/events?include_archived=false')
@@ -194,18 +202,39 @@ export default function EventsAgendaPage() {
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="page-header mb-0">
           <h1 className="page-title">Alliance Events</h1>
-          <p className="page-subtitle">Agenda view</p>
+          <p className="page-subtitle">{view === 'agenda' ? 'Agenda view' : 'Month view'}</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + New Event
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-full border border-tactical-200 bg-white p-0.5">
+            <button
+              onClick={() => setView('agenda')}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${view === 'agenda' ? 'bg-accent text-white' : 'text-tactical-600'}`}
+            >
+              Agenda
+            </button>
+            <button
+              onClick={() => setView('month')}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${view === 'month' ? 'bg-accent text-white' : 'text-tactical-600'}`}
+            >
+              Month
+            </button>
+          </div>
+          <button onClick={() => openCreate()} className="btn-primary">
+            + New Event
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="glass-card p-8 text-center text-tactical-500">Loading events…</div>
+      ) : view === 'month' ? (
+        <MonthCalendar
+          events={events}
+          onDayClick={dateKey => openCreate(dateKey)}
+        />
       ) : events.length === 0 ? (
         <div className="glass-card p-8 text-center">
           <p className="text-2xl mb-3">🗓️</p>
@@ -230,8 +259,9 @@ export default function EventsAgendaPage() {
       {showCreate && (
         <EventFormModal
           allianceId={allianceId}
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); fetchEvents() }}
+          initialDate={prefillDate}
+          onClose={() => { setShowCreate(false); setPrefillDate(undefined) }}
+          onCreated={() => { setShowCreate(false); setPrefillDate(undefined); fetchEvents() }}
         />
       )}
     </div>
