@@ -24,6 +24,7 @@ const NAV: NavItem[] = [
   { label: 'Duel',              href: '/alliance/[id]/duel',           icon: '◎',  roles: ['r1','r2','r3','r4','r5','supreme'] },
   { label: 'DSB',               href: '/alliance/[id]/dsb',            icon: '◆',  roles: ['r1','r2','r3','r4','r5','supreme'] },
   { label: 'Canyon',            href: '/alliance/[id]/canyon',         icon: '◇',  roles: ['r1','r2','r3','r4','r5','supreme'] },
+  { label: 'Events',            href: '/alliance/[id]/events',         icon: '🗓', roles: ['r1','r2','r3','r4','r5','supreme'] },
   { label: 'Transfers',         href: '/transfers',                    icon: '⇄',  roles: ['r1','r2','r3','r4','r5','supreme'], divider: true },
   // ── R4 + R5 + Supreme ─────────────────────────────────────────────────────
   // Verification is a unified route (not alliance-scoped) because Supreme

@@ -35,6 +35,7 @@ export default function BottomNav({ role, allianceId }: Props) {
     { label: 'Duel',      href: `${allianceBase}/duel`,    icon: '⚔️' },
     { label: 'DSB',       href: `${allianceBase}/dsb`,     icon: '◆'  },
     { label: 'Canyon',    href: `${allianceBase}/canyon`,  icon: '◇'  },
+    { label: 'Events',    href: `${allianceBase}/events`,  icon: '🗓' },
     { label: 'Transfers', href: '/transfers',              icon: '🔄' },
   ]
 
